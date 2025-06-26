@@ -86,9 +86,13 @@ async def invoke_llm(
     """Invoke LLM with streaming response, printing StreamResponse objects to stdout as JSON"""
 
     request_args = make_request_args(opts, prompt, system_prompt)
+    messages = request_args.data.get("messages", [])
 
     while True:
         try:
+
+            print(request_args.data["messages"])
+            input()
             message_started = False
             # Make streaming request
             response = requests.post(
@@ -120,6 +124,13 @@ async def invoke_llm(
 
             await run_tools()
 
+            # Add tool call and response messages
+            tool_call_response_to_openai_messages(messages, TOOL_CALLS)
+            request_args.data["messages"] = messages
+
+            # Clear tool calls for next iteration
+            TOOL_CALLS.clear()
+
         except Exception as e:
             print(e)
             # Print error as StreamResponse
@@ -127,6 +138,32 @@ async def invoke_llm(
                 id="", delta=f"Error: {str(e)}", type="response_end"
             )
             print_to_stdout(error_response)
+
+
+def tool_call_response_to_openai_messages(
+    messages: list, tool_calls: dict[str, ToolCall]
+):
+    if not tool_calls:
+        return
+
+    # Add assistant message with tool calls
+    tool_calls_list = []
+    for tc in tool_calls.values():
+        tool_calls_list.append(
+            {
+                "id": tc.id,
+                "type": "function",
+                "function": {"name": tc.name, "arguments": tc.arguments},
+            }
+        )
+
+    messages.append({"role": "assistant", "tool_calls": tool_calls_list})
+
+    # Add tool result messages
+    for tc in tool_calls.values():
+        messages.append(
+            {"role": "tool", "tool_call_id": tc.id, "content": str(tc.result)}
+        )
 
 
 def print_to_stdout(data: StreamResponse) -> None:
