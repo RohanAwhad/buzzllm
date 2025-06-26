@@ -92,4 +92,4 @@ def _python_type_to_json_type(python_type):
     if origin in type_map:
         return type_map[origin]
 
-    return "string"  # fallback
+    raise NotImplementedError(f"decoding of '{python_type}' is not yet implemented")

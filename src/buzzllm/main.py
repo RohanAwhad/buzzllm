@@ -11,7 +11,7 @@ from .llm import (
     tool_call_response_to_anthropic_messages,
 )
 from .prompts import prompts
-from .tools import utils, websearch
+from .tools import utils, websearch, codesearch
 
 
 def parse_args():
@@ -97,6 +97,19 @@ async def chat(
         tools = [
             callable_to_schema(utils.AVAILABLE_TOOLS["search_web"]),
             callable_to_schema(utils.AVAILABLE_TOOLS["scrape_webpage"]),
+        ]
+    elif original_system_prompt == "codesearch":
+        utils.add_tool(codesearch.bash_find)
+        utils.add_tool(codesearch.bash_ripgrep)
+        utils.add_tool(codesearch.bash_read)
+        tools = [
+            callable_to_schema(
+                utils.AVAILABLE_TOOLS["bash_find"], codesearch.bash_find_tool_desc
+            ),
+            callable_to_schema(
+                utils.AVAILABLE_TOOLS["bash_ripgrep"], codesearch.bash_ripgrep_tool_desc
+            ),
+            callable_to_schema(utils.AVAILABLE_TOOLS["bash_read"]),
         ]
 
     # Create LLM options
