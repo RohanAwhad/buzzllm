@@ -1,10 +1,13 @@
+import asyncio
 import dataclasses
 import json
 import os
 import requests
 
-from typing import Generator, Optional, Callable, Literal
+from typing import Generator, Optional, Callable, Literal, Any
 from dataclasses import dataclass
+
+from .tools import utils
 
 
 @dataclass
@@ -15,7 +18,7 @@ class LLMOptions:
     max_tokens: Optional[int] = 8192
     temperature: float = 0.8
     think: bool = False
-    tools: Optional[list] = None
+    tools: Optional[list[dict]] = None
     max_infer_iters: int = 10
 
 
@@ -41,7 +44,39 @@ class StreamResponse:
         return json.dumps(dataclasses.asdict(self))
 
 
-def invoke_llm(
+@dataclass
+class ToolCall:
+    id: str
+    name: str
+    arguments: str
+    executed: bool = False
+    result: Any = None
+
+    async def execute(self, func: Callable):
+        args = json.loads(self.arguments)
+        res = func(**args)
+        if asyncio.iscoroutine(res):
+            self.result = await res
+        else:
+            self.result = res
+        self.executed = True
+
+
+TOOL_CALLS: dict[str, ToolCall] = {}
+current_tool_call_id: str = ""
+
+
+async def run_tools():
+    tasks = []
+    for tc in TOOL_CALLS.values():
+        if tc.executed:
+            continue
+        tasks.append(tc.execute(utils.AVAILABLE_TOOLS[tc.name]))
+
+    await asyncio.gather(*tasks)
+
+
+async def invoke_llm(
     opts: LLMOptions,
     prompt: str,
     system_prompt: str,
@@ -51,39 +86,47 @@ def invoke_llm(
     """Invoke LLM with streaming response, printing StreamResponse objects to stdout as JSON"""
 
     request_args = make_request_args(opts, prompt, system_prompt)
-    message_started = False
 
-    try:
-        # Make streaming request
-        response = requests.post(
-            opts.url,
-            headers=request_args.headers,
-            json=request_args.data,
-            stream=True,
-            timeout=30,
-        )
-        response.raise_for_status()
+    while True:
+        try:
+            message_started = False
+            # Make streaming request
+            response = requests.post(
+                opts.url,
+                headers=request_args.headers,
+                json=request_args.data,
+                stream=True,
+                timeout=30,
+            )
+            response.raise_for_status()
 
-        # Process streaming response
-        for line in response.iter_lines(decode_unicode=True):
-            if not line.strip():
-                continue
-
-            # Handle the streaming response
-            stream_responses_gen = handle_stream_response(line, message_started)
-            for stream_response in stream_responses_gen:
-                if not stream_response:
+            # Process streaming response
+            for line in response.iter_lines(decode_unicode=True):
+                if not line.strip():
                     continue
-                if stream_response.type == "response_start":
-                    message_started = True
-                print_to_stdout(stream_response)
 
-    except Exception as e:
-        # Print error as StreamResponse
-        error_response = StreamResponse(
-            id="", delta=f"Error: {str(e)}", type="response_end"
-        )
-        print_to_stdout(error_response)
+                # Handle the streaming response
+                stream_responses_gen = handle_stream_response(line, message_started)
+                for stream_response in stream_responses_gen:
+                    if not stream_response:
+                        continue
+                    if stream_response.type == "response_start":
+                        message_started = True
+                    print_to_stdout(stream_response)
+
+            # Perform tool calls
+            if not TOOL_CALLS:
+                return
+
+            await run_tools()
+
+        except Exception as e:
+            print(e)
+            # Print error as StreamResponse
+            error_response = StreamResponse(
+                id="", delta=f"Error: {str(e)}", type="response_end"
+            )
+            print_to_stdout(error_response)
 
 
 def print_to_stdout(data: StreamResponse) -> None:
@@ -123,6 +166,9 @@ def make_openai_request_args(
         data["temperature"] = opts.temperature
         data["max_tokens"] = opts.max_tokens
 
+    if opts.tools:
+        data["tools"] = opts.tools
+
     # headers
     headers = {"Content-Type": "application/json"}
     if opts.api_key_name:
@@ -153,19 +199,54 @@ def handle_openai_stream_response(
             yield StreamResponse(id=response_id, type="response_start", delta="")
 
         # Handle content deltas
-        if chunk_data.get("choices") and len(chunk_data["choices"]) > 0:
-            choice = chunk_data["choices"][0]
-            delta = choice.get("delta", {})
+        if not chunk_data.get("choices") or len(chunk_data["choices"]) == 0:
+            yield None
 
-            # Handle regular content
-            if "content" in delta and delta["content"]:
-                yield StreamResponse(id="", delta=delta["content"], type="output_text")
+        choice = chunk_data["choices"][0]
+        delta = choice.get("delta", {})
 
-            # Handle reasoning content (for o1 models)
-            if "reasoning" in delta and delta["reasoning"]:
-                yield StreamResponse(
-                    id="", delta=delta["reasoning"], type="reasoning_content"
-                )
+        # Handle regular content
+        if "content" in delta and delta["content"]:
+            yield StreamResponse(id="", delta=delta["content"], type="output_text")
+
+        # Handle reasoning content (for o1 models)
+        if "reasoning" in delta and delta["reasoning"]:
+            yield StreamResponse(
+                id="", delta=delta["reasoning"], type="reasoning_content"
+            )
+
+        # Handle tool calls
+        if "tool_calls" in delta:
+            global current_tool_call_id
+            for tool_call in delta["tool_calls"]:
+                tool_call_content = ""
+
+                # first chunk - create new tool call
+                if "id" in tool_call:
+                    current_tool_call_id = tool_call["id"]
+                    TOOL_CALLS[current_tool_call_id] = ToolCall(
+                        id=current_tool_call_id, name="", arguments="", executed=False
+                    )
+
+                if "function" in tool_call:
+                    function = tool_call["function"]
+
+                    if "name" in function and function["name"]:
+                        if current_tool_call_id in TOOL_CALLS:
+                            TOOL_CALLS[current_tool_call_id].name = function["name"]
+                        tool_call_content += f"Function: {function['name']}\n"
+
+                    if "arguments" in function and function["arguments"]:
+                        if current_tool_call_id in TOOL_CALLS:
+                            TOOL_CALLS[current_tool_call_id].arguments += function[
+                                "arguments"
+                            ]
+                        tool_call_content += function["arguments"]
+
+                if tool_call_content:
+                    yield StreamResponse(
+                        id="", delta=tool_call_content, type="tool_call"
+                    )
 
     except Exception:
         yield None
