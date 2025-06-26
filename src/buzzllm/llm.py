@@ -90,7 +90,7 @@ def print_to_stdout(data: StreamResponse) -> None:
     # Print to stdout in SSE format
     print(f"event: {data.type}")
     print(f"data: {data.to_json()}")
-    print()  # Empty line for SSE format
+    print("", flush=True)  # Empty line for SSE format
 
 
 # LLM Specific funcs
