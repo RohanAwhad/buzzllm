@@ -1,13 +1,16 @@
 [project]
-name = "dingllm-v1"
+name = "buzzllm"
 version = "0.1.0"
-description = "Add your description here"
+description = "CLI for invoking LLMs with streaming response"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "requests>=2.32.4",
-    "typer>=0.16.0",
 ]
+
+[project.scripts]
+buzzllm = "buzzllm.main:main"
+
 
 [dependency-groups]
 dev = [

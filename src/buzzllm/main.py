@@ -1,5 +1,5 @@
 import argparse
-from src.llm import (
+from .llm import (
     LLMOptions,
     invoke_llm,
     make_openai_request_args,
@@ -7,7 +7,7 @@ from src.llm import (
     make_anthropic_request_args,
     handle_anthropic_stream_response,
 )
-from src.prompts import prompts
+from .prompts import prompts
 
 
 def parse_args():
