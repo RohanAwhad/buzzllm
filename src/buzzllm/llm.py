@@ -37,6 +37,7 @@ class StreamResponse:
         "output_text",
         "reasoning_content",
         "tool_call",
+        "block_end",
         "response_end",
     ]
 
@@ -82,17 +83,15 @@ async def invoke_llm(
     system_prompt: str,
     make_request_args: Callable,
     handle_stream_response: Callable,
+    add_tool_response: Callable,
 ) -> None:
     """Invoke LLM with streaming response, printing StreamResponse objects to stdout as JSON"""
 
     request_args = make_request_args(opts, prompt, system_prompt)
     messages = request_args.data.get("messages", [])
 
-    while True:
-        try:
-
-            print(request_args.data["messages"])
-            input()
+    try:
+        while True:
             message_started = False
             # Make streaming request
             response = requests.post(
@@ -125,45 +124,22 @@ async def invoke_llm(
             await run_tools()
 
             # Add tool call and response messages
-            tool_call_response_to_openai_messages(messages, TOOL_CALLS)
+            add_tool_response(messages, TOOL_CALLS)
+            # tool_call_response_to_openai_messages(messages, TOOL_CALLS)
             request_args.data["messages"] = messages
 
             # Clear tool calls for next iteration
             TOOL_CALLS.clear()
 
-        except Exception as e:
-            print(e)
-            # Print error as StreamResponse
-            error_response = StreamResponse(
-                id="", delta=f"Error: {str(e)}", type="response_end"
-            )
-            print_to_stdout(error_response)
-
-
-def tool_call_response_to_openai_messages(
-    messages: list, tool_calls: dict[str, ToolCall]
-):
-    if not tool_calls:
-        return
-
-    # Add assistant message with tool calls
-    tool_calls_list = []
-    for tc in tool_calls.values():
-        tool_calls_list.append(
-            {
-                "id": tc.id,
-                "type": "function",
-                "function": {"name": tc.name, "arguments": tc.arguments},
-            }
+    except Exception as e:
+        print(e)
+        # Print error as StreamResponse
+        error_response = StreamResponse(
+            id="", delta=f"Error: {str(e)}", type="block_end"
         )
-
-    messages.append({"role": "assistant", "tool_calls": tool_calls_list})
-
-    # Add tool result messages
-    for tc in tool_calls.values():
-        messages.append(
-            {"role": "tool", "tool_call_id": tc.id, "content": str(tc.result)}
-        )
+        print_to_stdout(error_response)
+    finally:
+        print(StreamResponse(id="", delta="", type="response_end"))
 
 
 def print_to_stdout(data: StreamResponse) -> None:
@@ -184,7 +160,7 @@ def make_openai_request_args(
 ) -> RequestArgs:
     # json body
     role = "system"
-    if opts.model == "o3":
+    if opts.model[0] == "o":
         role = "developer"
 
     data = {
@@ -196,7 +172,7 @@ def make_openai_request_args(
         "stream": True,
     }
 
-    if opts.model == "o3":
+    if opts.model[0] == "o":
         data["reasoning_effort"] = "high"
         data["response_format"] = {"type": "text"}
     else:
@@ -225,7 +201,7 @@ def handle_openai_stream_response(
     data_content = line[len("data: ") :]  # Remove 'data: ' prefix
 
     if data_content == "[DONE]":
-        yield StreamResponse(delta="", type="response_end", id="")
+        yield StreamResponse(delta="", type="block_end", id="")
 
     try:
         chunk_data = json.loads(data_content)
@@ -289,6 +265,32 @@ def handle_openai_stream_response(
         yield None
 
 
+def tool_call_response_to_openai_messages(
+    messages: list, tool_calls: dict[str, ToolCall]
+):
+    if not tool_calls:
+        return
+
+    # Add assistant message with tool calls
+    tool_calls_list = []
+    for tc in tool_calls.values():
+        tool_calls_list.append(
+            {
+                "id": tc.id,
+                "type": "function",
+                "function": {"name": tc.name, "arguments": tc.arguments},
+            }
+        )
+
+    messages.append({"role": "assistant", "tool_calls": tool_calls_list})
+
+    # Add tool result messages
+    for tc in tool_calls.values():
+        messages.append(
+            {"role": "tool", "tool_call_id": tc.id, "content": str(tc.result)}
+        )
+
+
 # ===
 # Anthropic messages api
 # ===
@@ -310,6 +312,9 @@ def make_anthropic_request_args(
     else:
         data["max_tokens"] = opts.max_tokens or 8192
 
+    if opts.tools:
+        data["tools"] = opts.tools
+
     headers = {"Content-Type": "application/json"}
     if opts.api_key_name:
         api_key = os.environ.get(opts.api_key_name, None)
@@ -323,6 +328,7 @@ def make_anthropic_request_args(
 def handle_anthropic_stream_response(
     line: str, message_started: bool
 ) -> Generator[StreamResponse | None, None, None]:
+    global current_tool_call_id
     # Skip event lines, only process data lines
     if line.startswith("event: "):
         yield None
@@ -342,6 +348,21 @@ def handle_anthropic_stream_response(
             message_id = chunk_data.get("message", {}).get("id", "")
             yield StreamResponse(id=message_id, type="response_start", delta="")
 
+        # Handle content block start (for tool use)
+        elif chunk_data.get("type") == "content_block_start":
+            content_block = chunk_data.get("content_block", {})
+            if content_block.get("type") == "tool_use":
+                tool_id = content_block.get("id", "")
+                tool_name = content_block.get("name", "")
+
+                current_tool_call_id = tool_id
+                TOOL_CALLS[tool_id] = ToolCall(
+                    id=tool_id, name=tool_name, arguments="", executed=False
+                )
+
+                tool_call_content = f"Function: {tool_name}\n"
+                yield StreamResponse(id="", delta=tool_call_content, type="tool_call")
+
         # Handle content block delta
         elif chunk_data.get("type") == "content_block_delta":
             delta = chunk_data.get("delta", {})
@@ -356,9 +377,48 @@ def handle_anthropic_stream_response(
             elif "text" in delta and delta["text"]:
                 yield StreamResponse(id="", delta=delta["text"], type="output_text")
 
+            # Handle tool input JSON delta
+            elif "partial_json" in delta and delta["partial_json"]:
+                if current_tool_call_id in TOOL_CALLS:
+                    TOOL_CALLS[current_tool_call_id].arguments += delta["partial_json"]
+
+                yield StreamResponse(
+                    id="", delta=delta["partial_json"], type="tool_call"
+                )
+
         # Handle message stop
         elif chunk_data.get("type") == "message_stop":
-            yield StreamResponse(id="", delta="", type="response_end")
+            yield StreamResponse(id="", delta="", type="block_end")
 
     except Exception:
         yield None
+
+
+def tool_call_response_to_anthropic_messages(
+    messages: list, tool_calls: dict[str, ToolCall]
+):
+    if not tool_calls:
+        return
+
+    # Add assistant message with tool uses
+    content = []
+    for tc in tool_calls.values():
+        content.append(
+            {
+                "type": "tool_use",
+                "id": tc.id,
+                "name": tc.name,
+                "input": json.loads(tc.arguments),
+            }
+        )
+
+    messages.append({"role": "assistant", "content": content})
+
+    # Add tool result message
+    content = []
+    for tc in tool_calls.values():
+        content.append(
+            {"type": "tool_result", "tool_use_id": tc.id, "content": str(tc.result)}
+        )
+
+    messages.append({"role": "user", "content": content})

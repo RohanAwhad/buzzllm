@@ -1,13 +1,17 @@
 import argparse
+import asyncio
 from .llm import (
     LLMOptions,
     invoke_llm,
     make_openai_request_args,
     handle_openai_stream_response,
+    tool_call_response_to_openai_messages,
     make_anthropic_request_args,
     handle_anthropic_stream_response,
+    tool_call_response_to_anthropic_messages,
 )
 from .prompts import prompts
+from .tools import utils, websearch
 
 
 def parse_args():
@@ -43,7 +47,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def chat(
+async def chat(
     model,
     url,
     prompt,
@@ -59,15 +63,41 @@ def chat(
     if prompt is None:
         return
 
-    # Check if system_prompt is a predefined prompt name
+    original_system_prompt = system_prompt
     if system_prompt in prompts:
         system_prompt = prompts[system_prompt]
 
     provider_map = {
-        "openai-chat": (make_openai_request_args, handle_openai_stream_response),
-        "anthropic": (make_anthropic_request_args, handle_anthropic_stream_response),
+        "openai-chat": (
+            make_openai_request_args,
+            handle_openai_stream_response,
+            utils.callable_to_openai_schema,
+            tool_call_response_to_openai_messages,
+        ),
+        "anthropic": (
+            make_anthropic_request_args,
+            handle_anthropic_stream_response,
+            utils.callable_to_anthropic_schema,
+            tool_call_response_to_anthropic_messages,
+        ),
     }
-    make_request_args_fn, handle_stream_response_fn = provider_map[provider]
+    (
+        make_request_args_fn,
+        handle_stream_response_fn,
+        callable_to_schema,
+        add_tool_response,
+    ) = provider_map[provider]
+
+    tools = None
+    if original_system_prompt == "websearch":
+        # Add websearch tools
+        utils.add_tool(websearch.search_web)
+        utils.add_tool(websearch.scrape_webpage)
+        # TODO: this is boilerplate need to remove this
+        tools = [
+            callable_to_schema(utils.AVAILABLE_TOOLS["search_web"]),
+            callable_to_schema(utils.AVAILABLE_TOOLS["scrape_webpage"]),
+        ]
 
     # Create LLM options
     opts = LLMOptions(
@@ -77,27 +107,35 @@ def chat(
         max_tokens=max_tokens,
         temperature=temperature,
         think=think,
+        tools=tools,
     )
 
     # Invoke LLM - this will print streaming responses to stdout
-    invoke_llm(
-        opts, prompt, system_prompt, make_request_args_fn, handle_stream_response_fn
+    await invoke_llm(
+        opts,
+        prompt,
+        system_prompt,
+        make_request_args_fn,
+        handle_stream_response_fn,
+        add_tool_response,
     )
 
 
 def main():
     """Main function that parses args and calls chat"""
     args = parse_args()
-    chat(
-        model=args.model,
-        url=args.url,
-        prompt=args.prompt,
-        system_prompt=args.system_prompt,
-        provider=args.provider,
-        api_key_name=args.api_key_name,
-        max_tokens=args.max_tokens,
-        temperature=args.temperature,
-        think=args.think,
+    asyncio.run(
+        chat(
+            model=args.model,
+            url=args.url,
+            prompt=args.prompt,
+            system_prompt=args.system_prompt,
+            provider=args.provider,
+            api_key_name=args.api_key_name,
+            max_tokens=args.max_tokens,
+            temperature=args.temperature,
+            think=args.think,
+        )
     )
 
 

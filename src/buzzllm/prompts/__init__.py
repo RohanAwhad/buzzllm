@@ -4,6 +4,7 @@ from . import (
     helpful_prompt,
     replace_prompt,
     hackhub_prompt,
+    websearch_prompt,
 )
 
 prompts = {
@@ -12,4 +13,5 @@ prompts = {
     "helpful": helpful_prompt.prompt,
     "replace": replace_prompt.prompt,
     "hackhub": hackhub_prompt.prompt,
+    "websearch": websearch_prompt.prompt,
 }
