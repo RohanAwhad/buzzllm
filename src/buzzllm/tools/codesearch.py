@@ -10,7 +10,6 @@ def _validate_path(path_str: str) -> str:
     """Ensure path is within CWD and return relative path"""
     path = Path(path_str).resolve()
     if not str(path).startswith(str(CWD)):
-        print("path outside cwd")
         raise ValueError(f"Path outside CWD not allowed: {path}")
     return str(path.relative_to(CWD))
 
@@ -165,12 +164,10 @@ def bash_find(
         cmd.extend(extra_args.split(" "))
 
     try:
-        print("running the following cmd:", cmd)
         result = subprocess.run(
             cmd, capture_output=True, text=True, timeout=30, cwd=CWD
         )
         if result.returncode != 0:
-            print("error: no matches found or command failed:", result.stderr)
             return {"error": f"Command failed: {result.stderr}"}
 
         lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
@@ -179,7 +176,6 @@ def bash_find(
     except TimeoutExpired:
         return {"error": "Command timed out after 30 seconds"}
 
-    print(f"Total files: {paginated['total']}, Returned: {paginated['returned']}")
     return paginated
 
 
@@ -215,12 +211,10 @@ def bash_ripgrep(
         cmd.extend(extra_args.split(" "))
 
     try:
-        print("running the following cmd:", cmd)
         result = subprocess.run(
             cmd, capture_output=True, text=True, timeout=30, cwd=CWD
         )
         if result.returncode != 0:
-            print("error: no matches found or command failed:", result.stderr)
             return {"error": f"No matches found or command failed: {result.stderr}"}
 
         lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
@@ -229,7 +223,6 @@ def bash_ripgrep(
     except TimeoutExpired:
         return {"error": "Command timed out after 30 seconds"}
 
-    print(f"Total matches: {paginated['total']}, Returned: {paginated['returned']}")
     return paginated
 
 
@@ -257,9 +250,6 @@ def bash_read(filepath: str, limit: int = 0, offset: int = 0):
 
         paginated["content"] = "\n".join(paginated["results"])
 
-        print(
-            f"File: {filepath}, Total lines: {paginated['total']}, Returned: {paginated['returned']}"
-        )
         return paginated
 
     except Exception as e:
