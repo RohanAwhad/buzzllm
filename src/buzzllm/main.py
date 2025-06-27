@@ -43,6 +43,9 @@ def parse_args():
         "--temperature", type=float, default=0.8, help="Response temperature"
     )
     parser.add_argument("--think", action="store_true", help="Enable thinking mode")
+    parser.add_argument(
+        "-S", "--sse", action="store_true", help="Enable SSE mode for printing"
+    )
 
     return parser.parse_args()
 
@@ -57,6 +60,7 @@ async def chat(
     max_tokens,
     temperature,
     think,
+    sse,
 ):
     """Invoke LLM with streaming response"""
 
@@ -131,6 +135,7 @@ async def chat(
         make_request_args_fn,
         handle_stream_response_fn,
         add_tool_response,
+        sse,
     )
 
 
@@ -148,6 +153,7 @@ def main():
             max_tokens=args.max_tokens,
             temperature=args.temperature,
             think=args.think,
+            sse=args.sse,
         )
     )
 

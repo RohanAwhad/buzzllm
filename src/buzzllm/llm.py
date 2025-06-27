@@ -84,6 +84,7 @@ async def invoke_llm(
     make_request_args: Callable,
     handle_stream_response: Callable,
     add_tool_response: Callable,
+    sse: bool,
 ) -> None:
     """Invoke LLM with streaming response, printing StreamResponse objects to stdout as JSON"""
 
@@ -115,7 +116,7 @@ async def invoke_llm(
                         continue
                     if stream_response.type == "response_start":
                         message_started = True
-                    print_to_stdout(stream_response)
+                    print_to_stdout(stream_response, sse)
 
             # Perform tool calls
             if not TOOL_CALLS:
@@ -137,16 +138,19 @@ async def invoke_llm(
         error_response = StreamResponse(
             id="", delta=f"Error: {str(e)}", type="block_end"
         )
-        print_to_stdout(error_response)
+        print_to_stdout(error_response, sse)
     finally:
         print(StreamResponse(id="", delta="", type="response_end"))
 
 
-def print_to_stdout(data: StreamResponse) -> None:
-    # Print to stdout in SSE format
-    print(f"event: {data.type}")
-    print(f"data: {data.to_json()}")
-    print("", flush=True)  # Empty line for SSE format
+def print_to_stdout(data: StreamResponse, sse: bool) -> None:
+    if sse:
+        # Print to stdout in SSE format
+        print(f"event: {data.type}")
+        print(f"data: {data.to_json()}")
+        print("", flush=True)  # Empty line for SSE format
+        return
+    print(data.delta, end="", flush=True)
 
 
 # LLM Specific funcs
