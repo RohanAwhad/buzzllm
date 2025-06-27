@@ -140,7 +140,7 @@ async def invoke_llm(
         )
         print_to_stdout(error_response, sse)
     finally:
-        print(StreamResponse(id="", delta="", type="response_end"))
+        print_to_stdout(StreamResponse(id="", delta="", type="response_end"), sse)
 
 
 def print_to_stdout(data: StreamResponse, sse: bool) -> None:
@@ -150,7 +150,18 @@ def print_to_stdout(data: StreamResponse, sse: bool) -> None:
         print(f"data: {data.to_json()}")
         print("", flush=True)  # Empty line for SSE format
         return
-    print(data.delta, end="", flush=True)
+
+    # Add colors for different content types
+    if data.type == "tool_call":
+        print(f"\033[96m{data.delta}\033[0m", end="", flush=True)  # Cyan
+    elif data.type == "reasoning_content":
+        print(f"\033[93m{data.delta}\033[0m", end="", flush=True)  # Yellow
+    elif data.type == "block_end":
+        print("\n", end="", flush=True)
+    elif data.type == "response_end":
+        print("\n\n=== [ DONE ] ===")
+    else:
+        print(data.delta, end="", flush=True)
 
 
 # LLM Specific funcs
