@@ -1,5 +1,5 @@
 import inspect
-from typing import Callable, get_type_hints, get_origin
+from typing import Callable, get_type_hints, get_origin, get_args, Union
 
 AVAILABLE_TOOLS = {}
 
@@ -24,8 +24,7 @@ def callable_to_openai_schema(func, desc: str = ""):
 
     for param_name, param in sig.parameters.items():
         param_type = type_hints.get(param_name, str)
-        properties[param_name] = {"type": _python_type_to_json_type(param_type)}
-
+        properties[param_name] = _python_type_to_json_schema(param_type)
         if param.default == inspect.Parameter.empty:
             required.append(param_name)
 
@@ -59,8 +58,7 @@ def callable_to_anthropic_schema(func, desc: str = ""):
 
     for param_name, param in sig.parameters.items():
         param_type = type_hints.get(param_name, str)
-        properties[param_name] = {"type": _python_type_to_json_type(param_type)}
-
+        properties[param_name] = _python_type_to_json_schema(param_type)
         if param.default == inspect.Parameter.empty:
             required.append(param_name)
 
@@ -75,8 +73,12 @@ def callable_to_anthropic_schema(func, desc: str = ""):
     }
 
 
-def _python_type_to_json_type(python_type):
-    type_map = {
+def _python_type_to_json_schema(python_type):
+    """
+    Return a JSON Schema fragment for the given Python typing object.
+    Supports builtin primitives, List[T], Dict[K, V], Optional[T], and Union[…].
+    """
+    primitive_map = {
         str: "string",
         int: "integer",
         float: "number",
@@ -85,11 +87,50 @@ def _python_type_to_json_type(python_type):
         dict: "object",
     }
 
-    if python_type in type_map:
-        return type_map[python_type]
+    # Support NoneType
+    if python_type is type(None):
+        return {"type": "null"}
 
     origin = get_origin(python_type)
-    if origin in type_map:
-        return type_map[origin]
+    args = get_args(python_type)
+
+    # Handle Union (including Optional)
+    if origin is Union:
+        # flatten nested Unions
+        branches = []
+        for arg in args:
+            if get_origin(arg) is Union:
+                branches.extend(get_args(arg))
+            else:
+                branches.append(arg)
+
+        subschemas = [_python_type_to_json_schema(b) for b in branches]
+        # if all branches are primitive types, collapse into a type array
+        primitive_types = []
+        for s in subschemas:
+            t = s.get("type")
+            if isinstance(t, str):
+                primitive_types.append(t)
+            else:
+                primitive_types = None
+                break
+        if primitive_types is not None:
+            return {"type": primitive_types}
+        # otherwise use oneOf
+        return {"oneOf": subschemas}
+
+    # Simple builtins
+    if python_type in primitive_map:
+        return {"type": primitive_map[python_type]}
+
+    # Parameterized containers
+    if origin is list:
+        item_schema = _python_type_to_json_schema(args[0]) if args else {}
+        return {"type": "array", "items": item_schema}
+
+    if origin is dict:
+        # JSON Schema objects only define value types
+        value_schema = _python_type_to_json_schema(args[1]) if len(args) > 1 else {}
+        return {"type": "object", "additionalProperties": value_schema}
 
     raise NotImplementedError(f"decoding of '{python_type}' is not yet implemented")
