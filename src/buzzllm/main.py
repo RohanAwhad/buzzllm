@@ -11,7 +11,8 @@ from .llm import (
     tool_call_response_to_anthropic_messages,
 )
 from .prompts import prompts
-from .tools import utils, websearch, codesearch
+from .tools import utils, websearch, codesearch, pythonexec
+
 
 
 def parse_args():
@@ -115,6 +116,12 @@ async def chat(
             ),
             callable_to_schema(utils.AVAILABLE_TOOLS["bash_read"]),
         ]
+    elif original_system_prompt == "pythonexec":
+        utils.add_tool(pythonexec.python_execute)
+        tools = [
+            callable_to_schema(utils.AVAILABLE_TOOLS["python_execute"]),
+        ]
+
 
     # Create LLM options
     opts = LLMOptions(

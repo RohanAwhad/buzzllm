@@ -10,6 +10,7 @@ dependencies = [
     "crawl4ai",
     "loguru",
     "tenacity",
+    "docker",
 ]
 
 [project.scripts]

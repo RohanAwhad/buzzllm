@@ -37,9 +37,11 @@ class StreamResponse:
         "output_text",
         "reasoning_content",
         "tool_call",
+        "tool_result",
         "block_end",
         "response_end",
     ]
+
 
     def to_json(self):
         return json.dumps(dataclasses.asdict(self))
@@ -124,6 +126,16 @@ async def invoke_llm(
 
             await run_tools()
 
+            # Print tool results
+            for tc in TOOL_CALLS.values():
+                if tc.executed and tc.result is not None:
+                    result_response = StreamResponse(
+                        id=tc.id,
+                        delta=f"\n\nTool Result ({tc.name}):\n{str(tc.result)}\n",
+                        type="tool_result"
+                    )
+                    print_to_stdout(result_response, sse)
+
             # Add tool call and response messages
             add_tool_response(messages, TOOL_CALLS)
             # tool_call_response_to_openai_messages(messages, TOOL_CALLS)
@@ -131,6 +143,7 @@ async def invoke_llm(
 
             # Clear tool calls for next iteration
             TOOL_CALLS.clear()
+
 
     except Exception as e:
         print(e)
@@ -140,7 +153,14 @@ async def invoke_llm(
         )
         print_to_stdout(error_response, sse)
     finally:
+        # Cleanup any running containers
+        try:
+            from .tools import pythonexec
+            pythonexec.cleanup_python_exec()
+        except ImportError:
+            pass
         print_to_stdout(StreamResponse(id="", delta="", type="response_end"), sse)
+
 
 
 def print_to_stdout(data: StreamResponse, sse: bool) -> None:
@@ -154,7 +174,8 @@ def print_to_stdout(data: StreamResponse, sse: bool) -> None:
     # Add colors for different content types
     if data.type == "tool_call":
         print(f"\033[96m{data.delta}\033[0m", end="", flush=True)  # Cyan
-
+    elif data.type == "tool_result":
+        print(f"\033[92m{data.delta}\033[0m", end="", flush=True)  # Green
     elif data.type == "reasoning_content":
         print(f"\033[93m{data.delta}\033[0m", end="", flush=True)  # Yellow
     elif data.type == "block_end":
@@ -163,6 +184,7 @@ def print_to_stdout(data: StreamResponse, sse: bool) -> None:
         print("\n\n=== [ DONE ] ===")
     else:
         print(data.delta, end="", flush=True)
+
 
 
 # LLM Specific funcs
