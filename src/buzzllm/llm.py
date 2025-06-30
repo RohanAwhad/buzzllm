@@ -100,7 +100,7 @@ async def invoke_llm(
                 headers=request_args.headers,
                 json=request_args.data,
                 stream=True,
-                timeout=30,
+                timeout=900,
             )
             response.raise_for_status()
 
@@ -154,6 +154,7 @@ def print_to_stdout(data: StreamResponse, sse: bool) -> None:
     # Add colors for different content types
     if data.type == "tool_call":
         print(f"\033[96m{data.delta}\033[0m", end="", flush=True)  # Cyan
+
     elif data.type == "reasoning_content":
         print(f"\033[93m{data.delta}\033[0m", end="", flush=True)  # Yellow
     elif data.type == "block_end":
@@ -262,7 +263,7 @@ def handle_openai_stream_response(
                     if "name" in function and function["name"]:
                         if current_tool_call_id in TOOL_CALLS:
                             TOOL_CALLS[current_tool_call_id].name = function["name"]
-                        tool_call_content += f"Function: {function['name']}\n"
+                        tool_call_content += f"\nFunction: {function['name']} "
 
                     if "arguments" in function and function["arguments"]:
                         if current_tool_call_id in TOOL_CALLS:
