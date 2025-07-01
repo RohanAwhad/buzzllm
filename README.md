@@ -19,7 +19,12 @@ This is a gateway for all llm tasks that I need to do. Examples:
 
 2. Run generation:
     ```bash
-    buzzllm "gpt-4o-mini" "https://api.openai.com/v1/chat/completions" "hello, world" --provider openai-chat --api-key-name OPENAI_API_KEY --system-prompt "You are a helpful agent" 
+    buzzllm "gpt-4o-mini" \
+        "https://api.openai.com/v1/chat/completions" \
+        "hello, world" \
+        --provider openai-chat \
+        --api-key-name OPENAI_API_KEY \
+        --system-prompt "You are a helpful agent" 
     ```
 
 ### Notes:
@@ -35,17 +40,32 @@ This is a gateway for all llm tasks that I need to do. Examples:
 
 ### Usage examples:
 
+- help
+    ```bash
+    buzzllm -h
+    ```
 - websearch
     ```bash
-    buzzllm "gpt-4o-mini" "https://api.openai.com/v1/chat/completions" "What was low for Meta's stock price yesterday? Today is July 1, 2025" --provider openai-chat --api-key-name OPENAI_API_KEY --system-prompt websearch 
+    buzzllm "gpt-4o-mini" \
+        "https://api.openai.com/v1/chat/completions" \
+        "What was low for Meta's stock price yesterday? Today is July 1, 2025" \
+        --provider openai-chat \
+        --api-key-name OPENAI_API_KEY \
+        --system-prompt websearch 
     ```
 - codesearch
     ```bash
-    buzzllm "gpt-4o-mini" "https://api.openai.com/v1/chat/completions" "in the current repo for scraping url contents what do we use?" --provider openai-chat --api-key-name OPENAI_API_KEY --system-prompt codesearch 
+    buzzllm "gpt-4o-mini" \
+        "https://api.openai.com/v1/chat/completions" \
+        "in the current repo for scraping url contents what do we use?" \
+        --provider openai-chat \
+        --api-key-name OPENAI_API_KEY \
+        --system-prompt codesearch 
     ```
 - pythonexec
     ```bash
-    # before running python execution template, we need a docker container to execute code safely
+    # before running python execution template,
+    # we need a docker container to execute code safely
 
     cd python_runtime_docker
     bash build_docker.sh build-python-exec
@@ -54,9 +74,19 @@ This is a gateway for all llm tasks that I need to do. Examples:
     ```bash
     # Now we can run the python execution
 
-    buzzllm "gpt-4o-mini" "https://api.openai.com/v1/chat/completions" "solve the equation 5 = mx + c, where m = 4/2 and x = 1. use python to write code and execute" --provider openai-chat --api-key-name OPENAI_API_KEY --system-prompt pythonexec
+    buzzllm "gpt-4o-mini" \
+        "https://api.openai.com/v1/chat/completions" \
+        "solve the equation 5 = mx + c, where m = 4/2 and x = 1. use python to write code and execute" \
+        --provider openai-chat \
+        --api-key-name OPENAI_API_KEY \
+        --system-prompt pythonexec
     ```
 - hackhub: We will be using claude sonnet 4 here. Its pretty easy to change provider.
     ```bash
-    buzzllm "claude-sonnet-4-20250514" "https://api.anthropic.com/v1/messages" "$(cat src/buzzllm/main.py)\nI need you to add a new tools argument to cli. There will be multiple tools, and in help provide a list of available tools" --provider anthropic --api-key-name ANTHROPIC_API_KEY --system-prompt hackhub
+    buzzllm "claude-sonnet-4-20250514" \
+        "https://api.anthropic.com/v1/messages" \
+        "$(cat src/buzzllm/main.py)\nI need you to add a new tools argument to cli. There will be multiple tools, and in help provide a list of available tools" \
+        --provider anthropic \
+        --api-key-name ANTHROPIC_API_KEY \
+        --system-prompt hackhub
     ```
