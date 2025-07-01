@@ -45,6 +45,15 @@ This is a gateway for all llm tasks that I need to do. Examples:
     ```
 - pythonexec
     ```bash
+    # before running python execution template, we need a docker container to execute code safely
+
+    cd python_runtime_docker
+    bash build_docker.sh build-python-exec
+    cd ../
+    ```
+    ```bash
+    # Now we can run the python execution
+
     buzzllm "gpt-4o-mini" "https://api.openai.com/v1/chat/completions" "solve the equation 5 = mx + c, where m = 4/2 and x = 1. use python to write code and execute" --provider openai-chat --api-key-name OPENAI_API_KEY --system-prompt pythonexec
     ```
 - hackhub: We will be using claude sonnet 4 here. Its pretty easy to change provider.
