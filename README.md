@@ -32,7 +32,7 @@ This is a gateway for all llm tasks that I need to do. Examples:
 1. `--provider openai-chat`: It uses openai chat completion compatible api endpoint for llm calls
 2. `--system-prompt websearch`: It uses the pre-built websearch system prompt and tools
     - Available templates:
-        1. `websearch`: Used for answering general questions that require websearch. Uses `search_web`, `scrape_webpage`, and `bash_read` tools
+        1. `websearch`: Used for answering general questions that require websearch. Uses `search_web`, and `scrape_webpage` tools
         2. `codesearch`: Used for answering questions about current codebase. Uses `bash_find`, `bash_grep`, and `bash_read` tools
         3. `pythonexec`: Used for executing python code in a kernel as a tool for the llm answer generation.
         4. `hackhub`: Used for "Apply Changes" functionality from Cursor in neovim. Generates changes in Search-Replace blocks.
