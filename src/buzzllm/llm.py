@@ -345,8 +345,8 @@ def make_anthropic_request_args(
     }
 
     if opts.think:
-        data["max_tokens"] = 40000
-        data["thinking"] = {"type": "enabled", "budget_tokens": 32000}
+        data["max_tokens"] = 32000
+        data["thinking"] = {"type": "enabled", "budget_tokens": 24000}
     else:
         data["max_tokens"] = opts.max_tokens or 8192
 
