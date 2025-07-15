@@ -261,7 +261,7 @@ def handle_openai_stream_response(
             yield StreamResponse(id="", delta=delta["content"], type="output_text")
 
         # Handle reasoning content (for o1 models)
-        if "reasoning" in delta and delta["reasoning"]:
+        if ("reasoning" in delta and delta["reasoning"]) or ('reasoning_content' in delta and delta['reasoning_content']):
             yield StreamResponse(
                 id="", delta=delta["reasoning"], type="reasoning_content"
             )
