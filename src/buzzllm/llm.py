@@ -3,6 +3,7 @@ import dataclasses
 import json
 import os
 import requests
+import subprocess
 
 from typing import Generator, Optional, Callable, Literal, Any
 from dataclasses import dataclass
@@ -460,3 +461,33 @@ def tool_call_response_to_anthropic_messages(
         )
 
     messages.append({"role": "user", "content": content})
+
+
+# ===
+# Vertex AI Anthropic messages api
+# ===
+
+
+def make_vertexai_anthropic_request_args(
+    opts: LLMOptions, prompt: str, system_prompt: str
+) -> RequestArgs:
+    data = {
+        "anthropic_version": "vertex-2023-10-16",
+        "system": system_prompt,
+        "messages": [{"role": "user", "content": prompt}],
+        "stream": True,
+    }
+
+    if opts.think:
+        data["max_tokens"] = 32000
+        data["thinking"] = {"type": "enabled", "budget_tokens": 24000}
+    else:
+        data["max_tokens"] = opts.max_tokens or 8192
+
+    if opts.tools:
+        data["tools"] = opts.tools
+
+    headers = {"Content-Type": "application/json"}
+    api_key = subprocess.run(['gcloud', 'auth', 'print-access-token'], capture_output=True, text=True)
+    headers["Authorization"] = f"Bearer {api_key.stdout.strip()}"
+    return RequestArgs(data=data, headers=headers)

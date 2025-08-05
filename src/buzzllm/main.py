@@ -9,6 +9,7 @@ from .llm import (
     make_anthropic_request_args,
     handle_anthropic_stream_response,
     tool_call_response_to_anthropic_messages,
+    make_vertexai_anthropic_request_args,
 )
 from .prompts import prompts
 from .tools import utils, websearch, codesearch, pythonexec
@@ -30,7 +31,7 @@ def parse_args():
 
     parser.add_argument(
         "--provider",
-        choices=["openai-chat", "anthropic"],
+        choices=["openai-chat", "anthropic", "vertexai-anthropic"],
         required=True,
         help="LLM provider type",
     )
@@ -81,6 +82,12 @@ async def chat(
         ),
         "anthropic": (
             make_anthropic_request_args,
+            handle_anthropic_stream_response,
+            utils.callable_to_anthropic_schema,
+            tool_call_response_to_anthropic_messages,
+        ),
+        "vertexai-anthropic": (
+            make_vertexai_anthropic_request_args,
             handle_anthropic_stream_response,
             utils.callable_to_anthropic_schema,
             tool_call_response_to_anthropic_messages,
