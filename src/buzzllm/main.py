@@ -6,6 +6,9 @@ from .llm import (
     make_openai_request_args,
     handle_openai_stream_response,
     tool_call_response_to_openai_messages,
+    make_openai_responses_request_args,
+    handle_openai_responses_stream_response,
+    tool_call_response_to_openai_responses_messages,
     make_anthropic_request_args,
     handle_anthropic_stream_response,
     tool_call_response_to_anthropic_messages,
@@ -31,7 +34,7 @@ def parse_args():
 
     parser.add_argument(
         "--provider",
-        choices=["openai-chat", "anthropic", "vertexai-anthropic"],
+        choices=["openai-chat", "openai-responses", "anthropic", "vertexai-anthropic"],
         required=True,
         help="LLM provider type",
     )
@@ -79,6 +82,12 @@ async def chat(
             handle_openai_stream_response,
             utils.callable_to_openai_schema,
             tool_call_response_to_openai_messages,
+        ),
+        "openai-responses": (
+            make_openai_responses_request_args,
+            handle_openai_responses_stream_response,
+            utils.callable_to_openai_schema,
+            tool_call_response_to_openai_responses_messages,
         ),
         "anthropic": (
             make_anthropic_request_args,

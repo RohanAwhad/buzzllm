@@ -464,6 +464,84 @@ def tool_call_response_to_anthropic_messages(
 
 
 # ===
+# OpenAI Responses api
+# ===
+
+
+def make_openai_responses_request_args(
+    opts: LLMOptions, prompt: str, system_prompt: str
+) -> RequestArgs:
+    data = {
+        "model": opts.model,
+        "input": prompt,
+        "stream": True,
+        "store": False,
+        "reasoning": {
+            "effort": "high",
+            "summary": "detailed"
+        }
+    }
+
+    if system_prompt:
+        data["instructions"] = system_prompt
+
+    if opts.tools:
+        raise NotImplementedError("Tools with OpenAI Responses API has not yet been implemented")
+
+    headers = {"Content-Type": "application/json"}
+    if opts.api_key_name:
+        api_key = os.environ.get(opts.api_key_name, None)
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+    return RequestArgs(data=data, headers=headers)
+
+
+def handle_openai_responses_stream_response(
+    line: str, message_started: bool
+) -> Generator[StreamResponse | None, None, None]:
+    if not line.startswith("data: "):
+        yield None
+        return
+
+    data_content = line[len("data: "):]
+
+    try:
+        chunk_data = json.loads(data_content)
+        event_type = chunk_data.get("type", "")
+
+        # Handle response start
+        if event_type == "response.created":
+            response_id = chunk_data.get("response", {}).get("id", "")
+            yield StreamResponse(id=response_id, type="response_start", delta="")
+
+        # Handle regular text content
+        elif event_type == "response.output_text.delta":
+            delta_text = chunk_data.get("delta", "")
+            yield StreamResponse(id="", delta=delta_text, type="output_text")
+
+        # Handle reasoning summary content
+        elif event_type == "response.reasoning_summary_text.delta":
+            delta_text = chunk_data.get("delta", "")
+            yield StreamResponse(id="", delta=delta_text, type="reasoning_content")
+
+        # Handle response completion
+        elif event_type == "response.completed":
+            yield StreamResponse(id="", delta="", type="block_end")
+
+    except Exception:
+        yield None
+
+
+def tool_call_response_to_openai_responses_messages(
+    messages: list, tool_calls: dict[str, ToolCall]
+):
+    # For now, reuse the same logic as OpenAI chat completions
+    # This may need adjustment based on how Responses API handles conversation state
+    tool_call_response_to_openai_messages(messages, tool_calls)
+
+
+# ===
 # Vertex AI Anthropic messages api
 # ===
 
