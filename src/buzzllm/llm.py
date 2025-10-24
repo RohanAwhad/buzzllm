@@ -197,11 +197,9 @@ def print_to_stdout(data: StreamResponse, sse: bool) -> None:
 def make_openai_request_args(
     opts: LLMOptions, prompt: str, system_prompt: str
 ) -> RequestArgs:
+    OPENAI_REASONING_MODELS=['gpt-5', 'gpt-5-mini', 'o4-mini', 'o3', 'o3-pro', 'gpt-5-pro']
     # json body
-    role = "system"
-    if opts.model[0] == "o":
-        role = "developer"
-
+    role = "developer"
     data = {
         "messages": [
             {"role": role, "content": system_prompt},
@@ -211,7 +209,7 @@ def make_openai_request_args(
         "stream": True,
     }
 
-    if opts.model[0] == "o":
+    if opts.model in OPENAI_REASONING_MODELS:
         data["reasoning_effort"] = "high"
         data["response_format"] = {"type": "text"}
     else:
