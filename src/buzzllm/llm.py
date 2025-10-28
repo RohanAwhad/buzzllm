@@ -199,10 +199,9 @@ def make_openai_request_args(
 ) -> RequestArgs:
     OPENAI_REASONING_MODELS=['gpt-5', 'gpt-5-mini', 'o4-mini', 'o3', 'o3-pro', 'gpt-5-pro']
     # json body
-    role = "developer"
     data = {
         "messages": [
-            {"role": role, "content": system_prompt},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ],
         "model": opts.model,
@@ -210,6 +209,7 @@ def make_openai_request_args(
     }
 
     if opts.model in OPENAI_REASONING_MODELS:
+        data['messages'][0]['role'] = 'developer'
         data["reasoning_effort"] = "high"
         data["response_format"] = {"type": "text"}
     else:
