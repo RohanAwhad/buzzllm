@@ -197,7 +197,7 @@ def print_to_stdout(data: StreamResponse, sse: bool) -> None:
 def make_openai_request_args(
     opts: LLMOptions, prompt: str, system_prompt: str
 ) -> RequestArgs:
-    OPENAI_REASONING_MODELS=['gpt-5', 'gpt-5-mini', 'o4-mini', 'o3', 'o3-pro', 'gpt-5-pro']
+    OPENAI_REASONING_MODELS=['gpt-5.1', 'gpt-5', 'gpt-5-mini', 'o4-mini', 'o3', 'o3-pro', 'gpt-5-pro']
     # json body
     data = {
         "messages": [
@@ -210,8 +210,8 @@ def make_openai_request_args(
 
     if opts.model in OPENAI_REASONING_MODELS:
         data['messages'][0]['role'] = 'developer'
-        data["reasoning_effort"] = "high"
         data["response_format"] = {"type": "text"}
+        data["reasoning_effort"] = "none" if opts.model == 'gpt-5.1' and not opts.think else "high" 
     else:
         data["temperature"] = opts.temperature
         data["max_tokens"] = opts.max_tokens
