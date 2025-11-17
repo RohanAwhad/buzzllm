@@ -1,15 +1,16 @@
 [project]
 name = "buzzllm"
-version = "0.2.3"
+version = "0.3.0"
 description = "CLI for invoking LLMs with streaming response"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "requests>=2.32.4",
-    "crawl4ai",
-    "loguru",
-    "tenacity",
-    "docker",
+  "requests>=2.32.4",
+  "crawl4ai",
+  "loguru",
+  "tenacity",
+  "docker",
+  "git+https://github.com/RohanAwhad/A-mem.git"
 ]
 
 [project.scripts]
@@ -18,5 +19,5 @@ buzzllm = "buzzllm.main:main"
 
 [dependency-groups]
 dev = [
-    "ipython>=8.37.0",
+  "ipython>=8.37.0",
 ]
