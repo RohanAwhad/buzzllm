@@ -15,7 +15,7 @@ from .llm import (
     make_vertexai_anthropic_request_args,
 )
 from .prompts import prompts
-from .tools import utils, websearch, codesearch, pythonexec
+from .tools import utils, websearch, codesearch, pythonexec, memory
 
 
 
@@ -110,20 +110,30 @@ async def chat(
     ) = provider_map[provider]
 
     tools = None
+
+    memory_tools: list[dict] = []
+    if original_system_prompt in {"helpful", "codesearch", "websearch", "memory"}:
+        utils.add_tool(memory.add_memory)
+        utils.add_tool(memory.search_memory)
+        memory_tools = [
+            callable_to_schema(utils.AVAILABLE_TOOLS["add_memory"]),
+            callable_to_schema(utils.AVAILABLE_TOOLS["search_memory"]),
+        ]
     if original_system_prompt == "websearch":
         # Add websearch tools
         utils.add_tool(websearch.search_web)
         utils.add_tool(websearch.scrape_webpage)
         # TODO: this is boilerplate need to remove this
-        tools = [
+        web_tools = [
             callable_to_schema(utils.AVAILABLE_TOOLS["search_web"]),
             callable_to_schema(utils.AVAILABLE_TOOLS["scrape_webpage"]),
         ]
+        tools = memory_tools + web_tools
     elif original_system_prompt == "codesearch":
         utils.add_tool(codesearch.bash_find)
         utils.add_tool(codesearch.bash_ripgrep)
         utils.add_tool(codesearch.bash_read)
-        tools = [
+        code_tools = [
             callable_to_schema(
                 utils.AVAILABLE_TOOLS["bash_find"], codesearch.bash_find_tool_desc
             ),
@@ -132,11 +142,14 @@ async def chat(
             ),
             callable_to_schema(utils.AVAILABLE_TOOLS["bash_read"]),
         ]
+        tools = memory_tools + code_tools
     elif original_system_prompt == "pythonexec":
         utils.add_tool(pythonexec.python_execute)
         tools = [
             callable_to_schema(utils.AVAILABLE_TOOLS["python_execute"]),
         ]
+    elif original_system_prompt in {"helpful", "memory"}:
+        tools = memory_tools or None
 
 
     # Create LLM options
