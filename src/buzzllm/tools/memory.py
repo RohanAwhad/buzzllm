@@ -23,7 +23,7 @@ def _get_memory_system() -> AgenticMemorySystem:
   return _memory_system
 
 
-def add_memory(content: str, tags: list[str] | None = None, category: str = "Chat") -> dict:
+def add_memory(content: str, tags: list[str] | None = None, category: str = "Chat"):
   """
   Store a concise long-term memory about the user or ongoing work.
 
@@ -72,7 +72,7 @@ def add_memory(content: str, tags: list[str] | None = None, category: str = "Cha
   return {"memory_id": mem_id, "status": "stored"}
 
 
-def search_memory(query: str, k: int = 5) -> list[dict]:
+def search_memory(query: str, k: int = 5):
   """
   Search previously stored long-term memories relevant to the current request.
 

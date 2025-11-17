@@ -1,5 +1,9 @@
 import inspect
 from typing import Callable, get_type_hints, get_origin, get_args, Union
+try:
+    from types import UnionType  # Python 3.10+
+except ImportError:
+    UnionType = None
 
 AVAILABLE_TOOLS = {}
 
@@ -87,49 +91,49 @@ def _python_type_to_json_schema(python_type):
         dict: "object",
     }
 
-    # Support NoneType
     if python_type is type(None):
         return {"type": "null"}
 
     origin = get_origin(python_type)
     args = get_args(python_type)
 
-    # Handle Union (including Optional)
-    if origin is Union:
-        # flatten nested Unions
+    if origin is Union or (UnionType is not None and origin is UnionType):
         branches = []
         for arg in args:
-            if get_origin(arg) is Union:
+            inner_origin = get_origin(arg)
+            if inner_origin is Union or (UnionType is not None and inner_origin is UnionType):
                 branches.extend(get_args(arg))
             else:
                 branches.append(arg)
 
         subschemas = [_python_type_to_json_schema(b) for b in branches]
-        # if all branches are primitive types, collapse into a type array
+
         primitive_types = []
         for s in subschemas:
             t = s.get("type")
-            if isinstance(t, str):
+            if (
+                isinstance(t, str)
+                and len(s) == 1
+                and t in {"string", "integer", "number", "boolean", "null"}
+            ):
                 primitive_types.append(t)
             else:
                 primitive_types = None
                 break
+
         if primitive_types is not None:
             return {"type": primitive_types}
-        # otherwise use oneOf
+
         return {"oneOf": subschemas}
 
-    # Simple builtins
     if python_type in primitive_map:
         return {"type": primitive_map[python_type]}
 
-    # Parameterized containers
     if origin is list:
         item_schema = _python_type_to_json_schema(args[0]) if args else {}
         return {"type": "array", "items": item_schema}
 
     if origin is dict:
-        # JSON Schema objects only define value types
         value_schema = _python_type_to_json_schema(args[1]) if len(args) > 1 else {}
         return {"type": "object", "additionalProperties": value_schema}
 

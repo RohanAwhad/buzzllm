@@ -10,7 +10,7 @@ dependencies = [
   "loguru",
   "tenacity",
   "docker",
-  "git+https://github.com/RohanAwhad/A-mem.git"
+  "agentic-memory@git+https://github.com/RohanAwhad/A-mem.git@main",
 ]
 
 [project.scripts]
