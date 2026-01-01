@@ -90,3 +90,21 @@ This is a gateway for all llm tasks that I need to do. Examples:
         --api-key-name ANTHROPIC_API_KEY \
         --system-prompt hackhub
     ```
+
+### Testing
+
+```bash
+# Install test dependencies
+uv pip install -e ".[test]"
+
+# Run all tests
+uv run pytest
+
+# Run by category
+uv run pytest tests/unit -v          # unit tests
+uv run pytest tests/integration -v   # requires API keys
+uv run pytest tests/e2e -v           # CLI tests
+
+# With coverage
+uv run pytest --cov=buzzllm
+```
