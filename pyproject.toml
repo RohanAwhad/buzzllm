@@ -15,8 +15,32 @@ dependencies = [
 [project.scripts]
 buzzllm = "buzzllm.main:main"
 
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "respx>=0.21.0",
+    "responses>=0.25.0",
+]
 
 [dependency-groups]
 dev = [
     "ipython>=8.37.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests (requires API keys)",
+    "e2e: End-to-end CLI tests",
+    "docker: Tests requiring Docker",
+]
+
+[tool.coverage.run]
+source = ["src/buzzllm"]
+branch = true
