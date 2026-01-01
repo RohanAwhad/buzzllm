@@ -51,6 +51,9 @@ def parse_args():
     parser.add_argument(
         "-S", "--sse", action="store_true", help="Enable SSE mode for printing"
     )
+    parser.add_argument(
+        "-b", "--brief", action="store_true", help="Only print final output, hide tool calls and results"
+    )
 
     return parser.parse_args()
 
@@ -66,6 +69,7 @@ async def chat(
     temperature,
     think,
     sse,
+    brief,
 ):
     """Invoke LLM with streaming response"""
 
@@ -159,6 +163,7 @@ async def chat(
         handle_stream_response_fn,
         add_tool_response,
         sse,
+        brief,
     )
 
 
@@ -177,6 +182,7 @@ def main():
             temperature=args.temperature,
             think=args.think,
             sse=args.sse,
+            brief=args.brief,
         )
     )
 

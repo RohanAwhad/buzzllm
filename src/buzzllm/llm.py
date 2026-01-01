@@ -88,6 +88,7 @@ async def invoke_llm(
     handle_stream_response: Callable,
     add_tool_response: Callable,
     sse: bool,
+    brief: bool = False,
 ) -> None:
     """Invoke LLM with streaming response, printing StreamResponse objects to stdout as JSON"""
 
@@ -119,7 +120,7 @@ async def invoke_llm(
                         continue
                     if stream_response.type == "response_start":
                         message_started = True
-                    print_to_stdout(stream_response, sse)
+                    print_to_stdout(stream_response, sse, brief)
 
             # Perform tool calls
             if not TOOL_CALLS:
@@ -135,7 +136,7 @@ async def invoke_llm(
                         delta=f"\n\nTool Result ({tc.name}):\n{str(tc.result)}\n",
                         type="tool_result"
                     )
-                    print_to_stdout(result_response, sse)
+                    print_to_stdout(result_response, sse, brief)
 
             # Add tool call and response messages
             add_tool_response(messages, TOOL_CALLS)
@@ -152,7 +153,7 @@ async def invoke_llm(
         error_response = StreamResponse(
             id="", delta=f"Error: {str(e)}", type="block_end"
         )
-        print_to_stdout(error_response, sse)
+        print_to_stdout(error_response, sse, brief)
     finally:
         # Cleanup any running containers
         try:
@@ -160,11 +161,15 @@ async def invoke_llm(
             pythonexec.cleanup_python_exec()
         except ImportError:
             pass
-        print_to_stdout(StreamResponse(id="", delta="", type="response_end"), sse)
+        print_to_stdout(StreamResponse(id="", delta="", type="response_end"), sse, brief)
 
 
 
-def print_to_stdout(data: StreamResponse, sse: bool) -> None:
+def print_to_stdout(data: StreamResponse, sse: bool, brief: bool = False) -> None:
+    # In brief mode, skip tool calls and results
+    if brief and data.type in ("tool_call", "tool_result"):
+        return
+
     if sse:
         # Print to stdout in SSE format
         print(f"event: {data.type}")

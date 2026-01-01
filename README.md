@@ -90,6 +90,16 @@ This is a gateway for all llm tasks that I need to do. Examples:
         --api-key-name ANTHROPIC_API_KEY \
         --system-prompt hackhub
     ```
+- brief mode (hide tool calls/results, show only final output)
+    ```bash
+    buzzllm "gpt-4o-mini" \
+        "https://api.openai.com/v1/chat/completions" \
+        "What is the weather in NYC?" \
+        --provider openai-chat \
+        --api-key-name OPENAI_API_KEY \
+        --system-prompt websearch \
+        --brief
+    ```
 
 ### Testing
 

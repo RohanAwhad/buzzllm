@@ -41,3 +41,15 @@ Add comprehensive test suite: unit tests, integration tests (OpenAI + Anthropic)
 ### Models Used
 - OpenAI: `gpt-4.1-mini` (standard), `gpt-5.1` (reasoning)
 - Anthropic: `claude-3-5-haiku-20241022` (standard), `claude-sonnet-4-20250514` (thinking)
+
+## 2026-01-01: Brief Mode Flag
+
+### Goal
+Add `--brief/-b` flag to hide intermediate tool calls/results, showing only final LLM output.
+
+### Changes
+- `main.py`: Added `--brief/-b` argument, passed through `chat()` to `invoke_llm()`
+- `llm.py`: Updated `invoke_llm()` and `print_to_stdout()` to skip `tool_call` and `tool_result` types when brief=True
+
+### Use Case
+Useful when using buzzllm as a Claude Code skill - prevents flooding context with intermediate steps.
