@@ -65,7 +65,7 @@ async def _search_duckduckgo(query: str, count: int = 10) -> list[dict]:
 
     if response.status_code == 202 or 'anomaly.js' in response.text:
         logger.warning("DuckDuckGo bot detection triggered")
-        return []
+        raise Exception("DuckDuckGo bot detection triggered")
 
     response.raise_for_status()
 
