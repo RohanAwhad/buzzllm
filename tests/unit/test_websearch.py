@@ -34,8 +34,11 @@ class TestSearchDuckDuckGo:
 
     @responses.activate
     @pytest.mark.asyncio
-    async def test_bot_detection_returns_empty(self):
-        from buzzllm.tools.websearch import _search_duckduckgo
+    async def test_bot_detection_raises(self):
+        from buzzllm.tools.websearch import (
+            _search_duckduckgo,
+            DuckDuckGoBotDetectedError,
+        )
 
         responses.add(
             responses.GET,
@@ -44,13 +47,16 @@ class TestSearchDuckDuckGo:
             status=200,
         )
 
-        results = await _search_duckduckgo("test")
-        assert results == []
+        with pytest.raises(DuckDuckGoBotDetectedError):
+            await _search_duckduckgo("test")
 
     @responses.activate
     @pytest.mark.asyncio
-    async def test_202_status_returns_empty(self):
-        from buzzllm.tools.websearch import _search_duckduckgo
+    async def test_202_status_raises(self):
+        from buzzllm.tools.websearch import (
+            _search_duckduckgo,
+            DuckDuckGoBotDetectedError,
+        )
 
         responses.add(
             responses.GET,
@@ -59,8 +65,8 @@ class TestSearchDuckDuckGo:
             status=202,
         )
 
-        results = await _search_duckduckgo("test")
-        assert results == []
+        with pytest.raises(DuckDuckGoBotDetectedError):
+            await _search_duckduckgo("test")
 
 
 class TestSearchBrave:
@@ -79,6 +85,28 @@ class TestSearchBrave:
         assert results[0]["title"] == "Example Title"
         assert results[0]["url"] == "https://example.com"
         assert results[0]["description"] == "Example description"
+
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_retries_on_http_error(self, mock_brave_json, env_with_api_keys):
+        from buzzllm.tools.websearch import _search_brave
+
+        call_count = {"count": 0}
+
+        def handler(request):
+            call_count["count"] += 1
+            if call_count["count"] == 1:
+                return httpx.Response(500)
+            return httpx.Response(200, json=mock_brave_json)
+
+        respx.get("https://api.search.brave.com/res/v1/web/search").mock(
+            side_effect=handler
+        )
+
+        results = await _search_brave("test query")
+
+        assert len(results) == 1
+        assert call_count["count"] == 2
 
     @pytest.mark.asyncio
     async def test_empty_query_returns_empty(self, env_with_api_keys):
@@ -139,6 +167,28 @@ class TestSearchWeb:
 
         results = await search_web("test")
         assert len(results) >= 1
+
+    @responses.activate
+    @respx.mock
+    @pytest.mark.asyncio
+    async def test_falls_back_to_brave_on_bot_detection(
+        self, mock_brave_json, env_with_api_keys
+    ):
+        from buzzllm.tools.websearch import search_web
+
+        responses.add(
+            responses.GET,
+            "https://lite.duckduckgo.com/lite/",
+            body="<script>anomaly.js</script>",
+            status=200,
+        )
+
+        respx.get("https://api.search.brave.com/res/v1/web/search").mock(
+            return_value=httpx.Response(200, json=mock_brave_json)
+        )
+
+        results = await search_web("test")
+        assert len(results) == 1
 
 
 class TestScrapeWebpage:

@@ -6,6 +6,9 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "requests>=2.32.4",
+    "httpx>=0.28.0",
+    "beautifulsoup4>=4.0.0",
+    "pydantic>=2.0.0",
     "crawl4ai",
     "loguru",
     "tenacity",

@@ -12,7 +12,13 @@ from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from crawl4ai.content_filter_strategy import PruningContentFilter
 from loguru import logger
-from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    RetryError,
+    retry_if_not_exception_type,
+)
 
 
 @lru_cache(maxsize=1)
@@ -39,7 +45,15 @@ class WebSearchResults(BaseModel):
     description: str | list[str]
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=8))
+class DuckDuckGoBotDetectedError(RuntimeError):
+    pass
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=8),
+    retry=retry_if_not_exception_type(DuckDuckGoBotDetectedError),
+)
 async def _search_duckduckgo(query: str, count: int = 10) -> list[dict]:
     """Search using DuckDuckGo"""
     if not query:
@@ -48,63 +62,63 @@ async def _search_duckduckgo(query: str, count: int = 10) -> list[dict]:
     base_url = "https://lite.duckduckgo.com/lite/"
 
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Cache-Control': 'max-age=0',
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Cache-Control": "max-age=0",
     }
 
-    params = {'q': query}
+    params = {"q": query}
     response = requests.get(base_url, params=params, headers=headers, timeout=15)
 
-    if response.status_code == 202 or 'anomaly.js' in response.text:
+    if response.status_code == 202 or "anomaly.js" in response.text:
         logger.warning("DuckDuckGo bot detection triggered")
-        raise Exception("DuckDuckGo bot detection triggered")
+        raise DuckDuckGoBotDetectedError("DuckDuckGo bot detection triggered")
 
     response.raise_for_status()
 
-    soup = BeautifulSoup(response.text, 'html.parser')
+    soup = BeautifulSoup(response.text, "html.parser")
     results = []
 
-    tables = soup.find_all('table')
+    tables = soup.find_all("table")
     if not tables:
         return []
 
     results_table = tables[-1]
-    rows = results_table.find_all('tr')
+    rows = results_table.find_all("tr")
 
     i = 0
     while i < len(rows) and len(results) < count:
         current_row = rows[i]
-        cells = current_row.find_all('td')
+        cells = current_row.find_all("td")
 
         if len(cells) >= 2:
             first_cell_text = cells[0].get_text(strip=True)
 
-            if re.match(r'^\d+\.\s*$', first_cell_text):
+            if re.match(r"^\d+\.\s*$", first_cell_text):
                 second_cell = cells[1]
-                link = second_cell.find('a', href=True)
+                link = second_cell.find("a", href=True)
 
                 if link:
                     title = link.get_text(strip=True)
-                    url = link.get('href')
+                    url = link.get("href")
 
                     description = ""
                     if i + 1 < len(rows):
                         desc_row = rows[i + 1]
-                        desc_cells = desc_row.find_all('td')
+                        desc_cells = desc_row.find_all("td")
                         if len(desc_cells) >= 2:
                             desc_text = desc_cells[1].get_text(strip=True)
-                            if not re.match(r'^https?://', desc_text):
+                            if not re.match(r"^https?://", desc_text):
                                 description = desc_text
 
-                    description = re.sub(r'\s+', ' ', description).strip()
+                    description = re.sub(r"\s+", " ", description).strip()
 
                     if title and url:
                         results.append(
@@ -119,7 +133,6 @@ async def _search_duckduckgo(query: str, count: int = 10) -> list[dict]:
         i += 1
 
     return results
-
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=8))
@@ -161,13 +174,18 @@ async def _search_web_async(query: str) -> list[dict]:
     """Internal async search function with fallback"""
     try:
         return await _search_duckduckgo(query)
+    except DuckDuckGoBotDetectedError:
+        logger.warning(
+            "DuckDuckGo bot detection triggered, falling back to Brave Search"
+        )
     except RetryError:
         logger.warning("DuckDuckGo search failed, falling back to Brave Search")
-        try:
-            return await _search_brave(query)
-        except RetryError:
-            logger.error("Both DuckDuckGo and Brave Search failed")
-            return []
+
+    try:
+        return await _search_brave(query)
+    except RetryError:
+        logger.error("Both DuckDuckGo and Brave Search failed")
+        return []
 
 
 async def search_web(query: str) -> list[dict]:
