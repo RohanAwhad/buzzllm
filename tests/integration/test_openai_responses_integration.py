@@ -15,7 +15,7 @@ class TestOpenAIResponsesIntegration:
         import requests
 
         opts = LLMOptions(
-            model="o3",
+            model="gpt-4.1-mini",
             url="https://api.openai.com/v1/responses",
             api_key_name="OPENAI_API_KEY",
             max_tokens=50,
@@ -69,7 +69,7 @@ class TestOpenAIResponsesIntegration:
         tools = [utils.callable_to_openai_schema(utils.AVAILABLE_TOOLS["get_weather"])]
 
         opts = LLMOptions(
-            model="o3",
+            model="gpt-4.1-mini",
             url="https://api.openai.com/v1/responses",
             api_key_name="OPENAI_API_KEY",
             max_tokens=100,
@@ -77,11 +77,16 @@ class TestOpenAIResponsesIntegration:
             tools=tools,
         )
 
+        def make_request_args_required(_opts, _prompt, _system_prompt):
+            args = make_openai_responses_request_args(_opts, _prompt, _system_prompt)
+            args.data["tool_choice"] = "required"
+            return args
+
         await invoke_llm(
             opts,
-            "You must call get_weather with city=Paris.",
-            "You are helpful. Use tools when needed.",
-            make_openai_responses_request_args,
+            "Call get_weather with city=Paris before responding.",
+            "Always call tools when a tool is available.",
+            make_request_args_required,
             handle_openai_responses_stream_response,
             tool_call_response_to_openai_responses_messages,
             sse=False,

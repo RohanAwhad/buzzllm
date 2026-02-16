@@ -71,6 +71,7 @@ class ToolCall:
 TOOL_CALLS: dict[str, ToolCall] = {}
 current_tool_call_id: str = ""
 last_openai_response_id: str = ""
+openai_responses_item_id_to_call_id: dict[str, str] = {}
 
 
 async def run_tools():
@@ -167,6 +168,7 @@ async def invoke_llm(
 
             # Clear tool calls for next iteration
             TOOL_CALLS.clear()
+            openai_responses_item_id_to_call_id.clear()
 
     except Exception as e:
         print(e)
@@ -522,6 +524,24 @@ def tool_call_response_to_anthropic_messages(
 # ===
 
 
+def _convert_openai_responses_tools(tools: list[dict]) -> list[dict]:
+    converted = []
+    for tool in tools:
+        if tool.get("type") == "function" and "function" in tool:
+            function = tool.get("function", {})
+            converted.append(
+                {
+                    "type": "function",
+                    "name": function.get("name"),
+                    "description": function.get("description"),
+                    "parameters": function.get("parameters"),
+                }
+            )
+        else:
+            converted.append(tool)
+    return converted
+
+
 def make_openai_responses_request_args(
     opts: LLMOptions, prompt: str, system_prompt: str
 ) -> RequestArgs:
@@ -535,12 +555,14 @@ def make_openai_responses_request_args(
         ],
         "stream": True,
         "store": False,
-        "reasoning": {
-            "effort": "high" if opts.think else "none",
-            "summary": "detailed" if opts.think else "none",
-        },
         "temperature": opts.temperature,
     }
+
+    if opts.think:
+        data["reasoning"] = {
+            "effort": "high",
+            "summary": "detailed",
+        }
 
     if opts.max_tokens:
         data["max_output_tokens"] = opts.max_tokens
@@ -549,7 +571,7 @@ def make_openai_responses_request_args(
         data["instructions"] = system_prompt
 
     if opts.tools:
-        data["tools"] = opts.tools
+        data["tools"] = _convert_openai_responses_tools(opts.tools)
         data["tool_choice"] = "auto"
 
     headers = {"Content-Type": "application/json"}
@@ -593,28 +615,45 @@ def handle_openai_responses_stream_response(
 
         elif event_type == "response.output_item.added":
             item = chunk_data.get("item", {})
-            if item.get("type") == "tool_call":
-                tool_id = item.get("id", "")
+            item_type = item.get("type")
+            if item_type in ("tool_call", "function_call"):
+                item_id = item.get("id", "")
+                call_id = item.get("call_id") or item_id
                 tool_name = item.get("name", "")
-                TOOL_CALLS[tool_id] = ToolCall(
-                    id=tool_id, name=tool_name, arguments="", executed=False
+                if item_id:
+                    openai_responses_item_id_to_call_id[item_id] = call_id
+                TOOL_CALLS[call_id] = ToolCall(
+                    id=call_id, name=tool_name, arguments="", executed=False
                 )
 
-        elif event_type == "response.tool_call_arguments.delta":
-            tool_call_id = chunk_data.get("tool_call_id", "")
+        elif event_type in (
+            "response.tool_call_arguments.delta",
+            "response.function_call_arguments.delta",
+        ):
+            item_id = (
+                chunk_data.get("item_id")
+                or chunk_data.get("tool_call_id")
+                or chunk_data.get("call_id")
+                or ""
+            )
+            call_id = openai_responses_item_id_to_call_id.get(item_id, item_id)
             delta_text = chunk_data.get("delta", "")
-            if tool_call_id in TOOL_CALLS:
-                TOOL_CALLS[tool_call_id].arguments += delta_text
+            if call_id in TOOL_CALLS:
+                TOOL_CALLS[call_id].arguments += delta_text
             if delta_text:
                 yield StreamResponse(id="", delta=delta_text, type="tool_call")
 
         elif event_type == "response.output_item.done":
             item = chunk_data.get("item", {})
-            if item.get("type") == "tool_call":
-                tool_id = item.get("id", "")
+            item_type = item.get("type")
+            if item_type in ("tool_call", "function_call"):
+                item_id = item.get("id", "")
+                call_id = item.get(
+                    "call_id"
+                ) or openai_responses_item_id_to_call_id.get(item_id, item_id)
                 arguments = item.get("arguments")
-                if tool_id in TOOL_CALLS and arguments:
-                    TOOL_CALLS[tool_id].arguments = arguments
+                if call_id in TOOL_CALLS and arguments:
+                    TOOL_CALLS[call_id].arguments = arguments
 
         # Handle response completion
         elif event_type == "response.completed":

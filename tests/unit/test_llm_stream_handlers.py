@@ -198,7 +198,12 @@ class TestHandleOpenaiResponsesStreamResponse:
     def test_tool_call_added(self):
         data = {
             "type": "response.output_item.added",
-            "item": {"type": "tool_call", "id": "call_1", "name": "search_web"},
+            "item": {
+                "type": "function_call",
+                "id": "fc_1",
+                "call_id": "call_1",
+                "name": "search_web",
+            },
         }
         line = f"data: {json.dumps(data)}"
         list(handle_openai_responses_stream_response(line, True))
@@ -207,12 +212,15 @@ class TestHandleOpenaiResponsesStreamResponse:
         assert TOOL_CALLS["call_1"].name == "search_web"
 
     def test_tool_call_arguments_delta(self):
-        TOOL_CALLS["call_2"] = ToolCall(
-            id="call_2", name="tool", arguments="", executed=False
+        list(
+            handle_openai_responses_stream_response(
+                f"data: {json.dumps({'type': 'response.output_item.added', 'item': {'type': 'function_call', 'id': 'fc_2', 'call_id': 'call_2', 'name': 'tool'}})}",
+                True,
+            )
         )
         data = {
-            "type": "response.tool_call_arguments.delta",
-            "tool_call_id": "call_2",
+            "type": "response.function_call_arguments.delta",
+            "item_id": "fc_2",
             "delta": '{"q": "test"}',
         }
         line = f"data: {json.dumps(data)}"
@@ -223,12 +231,29 @@ class TestHandleOpenaiResponsesStreamResponse:
         assert len(tool_calls) == 1
 
     def test_tool_call_done_sets_arguments(self):
-        TOOL_CALLS["call_3"] = ToolCall(
-            id="call_3", name="tool", arguments="", executed=False
+        added = {
+            "type": "response.output_item.added",
+            "item": {
+                "type": "function_call",
+                "id": "fc_3",
+                "call_id": "call_3",
+                "name": "tool",
+            },
+        }
+        list(
+            handle_openai_responses_stream_response(
+                f"data: {json.dumps(added)}",
+                True,
+            )
         )
         data = {
             "type": "response.output_item.done",
-            "item": {"type": "tool_call", "id": "call_3", "arguments": "{}"},
+            "item": {
+                "type": "function_call",
+                "id": "fc_3",
+                "call_id": "call_3",
+                "arguments": "{}",
+            },
         }
         line = f"data: {json.dumps(data)}"
         list(handle_openai_responses_stream_response(line, True))

@@ -286,8 +286,7 @@ class TestMakeOpenaiResponsesRequestArgs:
         assert args.data["instructions"] == "Instructions"
         assert args.data["stream"] is True
         assert args.data["store"] is False
-        assert args.data["reasoning"]["effort"] == "none"
-        assert args.data["reasoning"]["summary"] == "none"
+        assert "reasoning" not in args.data
 
     def test_tools_are_included(self, env_with_api_keys):
         tools = [{"type": "function", "function": {"name": "test"}}]
@@ -299,7 +298,7 @@ class TestMakeOpenaiResponsesRequestArgs:
         )
 
         args = make_openai_responses_request_args(opts, "Hello", "System")
-        assert args.data["tools"] == tools
+        assert args.data["tools"][0]["name"] == "test"
         assert args.data["tool_choice"] == "auto"
 
     def test_reasoning_mode(self, env_with_api_keys):

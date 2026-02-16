@@ -12,7 +12,11 @@ def docker_available() -> bool:
 
         client = docker.from_env()
         client.ping()
-        return True
+        images = client.images.list(name="buzz/python-exec")
+        for image in images:
+            if "buzz/python-exec:latest" in image.tags:
+                return True
+        return False
     except Exception:
         return False
 
@@ -51,6 +55,7 @@ def reset_tool_state():
     llm.TOOL_CALLS.clear()
     llm.current_tool_call_id = ""
     llm.last_openai_response_id = ""
+    llm.openai_responses_item_id_to_call_id.clear()
 
     yield
 
@@ -58,6 +63,7 @@ def reset_tool_state():
     llm.TOOL_CALLS.clear()
     llm.current_tool_call_id = ""
     llm.last_openai_response_id = ""
+    llm.openai_responses_item_id_to_call_id.clear()
 
 
 # === LLM fixtures ===

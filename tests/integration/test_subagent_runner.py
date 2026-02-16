@@ -18,10 +18,10 @@ class TestSubagentRunner:
         sse_text = "\n".join(
             [
                 "event: output_text",
-                'data: {\\"id\\":\\"\\",\\"delta\\":\\"Hello \\",\\"type\\":\\"output_text\\"}',
+                'data: {"id":"","delta":"Hello ","type":"output_text"}',
                 "",
                 "event: output_text",
-                'data: {\\"id\\":\\"\\",\\"delta\\":\\"world\\",\\"type\\":\\"output_text\\"}',
+                'data: {"id":"","delta":"world","type":"output_text"}',
                 "",
             ]
         )
