@@ -73,3 +73,13 @@ Commands+Results: (none)
 Decisions: Keep SSE parsing minimal and output_text-only for subagent output.
 Next: Add call_subagent tool and main wiring.
 Checkpoint: a2db6f5
+
+## 2026-02-15: Iter 1 M3 call_subagent Tool
+
+Timestamp: 2026-02-15
+Goal: Add call_subagent tool and wire into main tool list.
+Changes: Added subagent context/config + payload builder, call_subagent execution, and integration/unit tests.
+Commands+Results: (none)
+Decisions: Validate tool_subset against catalog before spawning subprocess.
+Next: Implement openai-responses tooling updates.
+Checkpoint: 6587e1f
