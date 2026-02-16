@@ -83,3 +83,13 @@ Commands+Results: (none)
 Decisions: Validate tool_subset against catalog before spawning subprocess.
 Next: Implement openai-responses tooling updates.
 Checkpoint: 6587e1f
+
+## 2026-02-15: Iter 1 Responses + Structured Outputs
+
+Timestamp: 2026-02-15
+Goal: Add OpenAI Responses tool loop support and structured output handling.
+Changes: Added responses input/tool handling, tool-call parsing, structured output buffering, and unit/integration tests.
+Commands+Results: (none)
+Decisions: Use response_format/output_config for structured outputs and previous_response_id for responses tool turns.
+Next: Run full pytest verifier.
+Checkpoint: d9e7781
