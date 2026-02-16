@@ -133,3 +133,13 @@ Commands+Results: uv run pytest -> 191 passed, 3 skipped.
 Decisions: None.
 Next: Commit fixes and summarize.
 Checkpoint: 2c09470
+
+## 2026-02-15: Iter 2 Responses Reasoning Effort
+
+Timestamp: 2026-02-15
+Goal: Align responses reasoning effort contract and keep integration passing.
+Changes: Set responses reasoning effort to none when think is false; updated request-args unit test; moved responses integration model to gpt-5.1 and added response status assertion.
+Commands+Results: uv run pytest -> 3 failed (responses integration 400s, request-args expectation); uv run pytest tests/integration/test_openai_responses_integration.py::TestOpenAIResponsesIntegration::test_simple_responses_output_text -s -> 400 reasoning.effort unsupported; uv run pytest tests/integration/test_openai_responses_integration.py::TestOpenAIResponsesIntegration::test_simple_responses_output_text -s -> 400 temperature unsupported; uv run pytest tests/integration/test_openai_responses_integration.py::TestOpenAIResponsesIntegration::test_simple_responses_output_text -s -> passed; uv run pytest -> 191 passed, 3 skipped.
+Decisions: Use gpt-5.1 for responses integration to support reasoning effort none with temperature.
+Next: None.
+Checkpoint: 3b673aa
