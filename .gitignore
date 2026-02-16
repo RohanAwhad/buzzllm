@@ -11,3 +11,4 @@ wheels/
 dev_scratch
 .dingllm/files.txt
 llm.md
+.llm.md
