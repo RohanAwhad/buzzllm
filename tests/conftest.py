@@ -4,10 +4,12 @@ import pytest
 
 # === Skip conditions ===
 
+
 def docker_available() -> bool:
     """Check if Docker daemon is running and accessible"""
     try:
         import docker
+
         client = docker.from_env()
         client.ping()
         return True
@@ -24,22 +26,20 @@ def anthropic_api_available() -> bool:
 
 
 skip_if_no_docker = pytest.mark.skipif(
-    not docker_available(),
-    reason="Docker daemon not available"
+    not docker_available(), reason="Docker daemon not available"
 )
 
 skip_if_no_openai = pytest.mark.skipif(
-    not openai_api_available(),
-    reason="OPENAI_API_KEY not set"
+    not openai_api_available(), reason="OPENAI_API_KEY not set"
 )
 
 skip_if_no_anthropic = pytest.mark.skipif(
-    not anthropic_api_available(),
-    reason="ANTHROPIC_API_KEY not set"
+    not anthropic_api_available(), reason="ANTHROPIC_API_KEY not set"
 )
 
 
 # === Reset global state ===
+
 
 @pytest.fixture(autouse=True)
 def reset_tool_state():
@@ -50,20 +50,24 @@ def reset_tool_state():
     utils.AVAILABLE_TOOLS.clear()
     llm.TOOL_CALLS.clear()
     llm.current_tool_call_id = ""
+    llm.last_openai_response_id = ""
 
     yield
 
     utils.AVAILABLE_TOOLS.clear()
     llm.TOOL_CALLS.clear()
     llm.current_tool_call_id = ""
+    llm.last_openai_response_id = ""
 
 
 # === LLM fixtures ===
+
 
 @pytest.fixture
 def sample_llm_options():
     """Basic LLMOptions fixture"""
     from buzzllm.llm import LLMOptions
+
     return LLMOptions(
         model="gpt-4o-mini",
         url="https://api.openai.com/v1/chat/completions",
@@ -77,22 +81,25 @@ def sample_llm_options():
 def sample_tool_calls():
     """Sample ToolCall dict for testing message conversion"""
     from buzzllm.llm import ToolCall
+
     return {
         "call_1": ToolCall(
             id="call_1",
             name="search_web",
             arguments='{"query": "python tutorial"}',
             executed=True,
-            result="Search results..."
+            result="Search results...",
         ),
     }
 
 
 # === Tool schema fixtures ===
 
+
 @pytest.fixture
 def sample_function_with_docstring():
     """Sample function for schema conversion"""
+
     def my_func(name: str, count: int = 10) -> str:
         """This is a sample function
 
@@ -100,18 +107,22 @@ def sample_function_with_docstring():
         :param count: Number of items
         """
         return f"{name}: {count}"
+
     return my_func
 
 
 @pytest.fixture
 def sample_function_without_docstring():
     """Function without docstring - should raise error"""
+
     def no_doc_func(x: int):
         pass
+
     return no_doc_func
 
 
 # === Codesearch fixtures ===
+
 
 @pytest.fixture
 def temp_cwd(tmp_path, monkeypatch):
@@ -121,11 +132,13 @@ def temp_cwd(tmp_path, monkeypatch):
     (tmp_path / "subdir" / "nested.py").write_text("x = 1\n")
 
     import buzzllm.tools.codesearch as codesearch_module
+
     monkeypatch.setattr(codesearch_module, "CWD", tmp_path)
     return tmp_path
 
 
 # === Websearch mock fixtures ===
+
 
 @pytest.fixture
 def mock_duckduckgo_html():
@@ -150,7 +163,7 @@ def mock_brave_json():
                 {
                     "title": "Example Title",
                     "url": "https://example.com",
-                    "description": "Example description"
+                    "description": "Example description",
                 }
             ]
         }
@@ -158,6 +171,7 @@ def mock_brave_json():
 
 
 # === Environment fixtures ===
+
 
 @pytest.fixture
 def env_with_api_keys(monkeypatch):

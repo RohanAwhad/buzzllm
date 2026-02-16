@@ -16,6 +16,8 @@ class TestLLMOptions:
         assert opts.think is False
         assert opts.tools is None
         assert opts.max_infer_iters == 10
+        assert opts.output_mode is None
+        assert opts.output_schema is None
 
     def test_custom_values(self):
         opts = LLMOptions(
@@ -27,12 +29,16 @@ class TestLLMOptions:
             think=True,
             tools=[{"name": "tool1"}],
             max_infer_iters=5,
+            output_mode="json_schema",
+            output_schema={"type": "object"},
         )
         assert opts.max_tokens == 4096
         assert opts.temperature == 0.5
         assert opts.think is True
         assert opts.tools == [{"name": "tool1"}]
         assert opts.max_infer_iters == 5
+        assert opts.output_mode == "json_schema"
+        assert opts.output_schema == {"type": "object"}
 
 
 class TestRequestArgs:
@@ -59,6 +65,10 @@ class TestStreamResponse:
     def test_tool_call_type(self):
         resp = StreamResponse(id="", delta="search_web", type="tool_call")
         assert resp.type == "tool_call"
+
+    def test_output_structured_type(self):
+        resp = StreamResponse(id="", delta="{}", type="output_structured")
+        assert resp.type == "output_structured"
 
     def test_to_json(self):
         resp = StreamResponse(id="abc", delta="test", type="output_text")
