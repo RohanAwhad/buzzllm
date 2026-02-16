@@ -15,7 +15,7 @@ class TestOpenAIResponsesIntegration:
         import requests
 
         opts = LLMOptions(
-            model="gpt-4.1-mini",
+            model="gpt-5.1",
             url="https://api.openai.com/v1/responses",
             api_key_name="OPENAI_API_KEY",
             max_tokens=50,
@@ -33,7 +33,7 @@ class TestOpenAIResponsesIntegration:
             stream=True,
             timeout=30,
         )
-        response.raise_for_status()
+        assert response.status_code == 200, response.text
 
         collected_text = []
         for line in response.iter_lines(decode_unicode=True):
@@ -69,7 +69,7 @@ class TestOpenAIResponsesIntegration:
         tools = [utils.callable_to_openai_schema(utils.AVAILABLE_TOOLS["get_weather"])]
 
         opts = LLMOptions(
-            model="gpt-4.1-mini",
+            model="gpt-5.1",
             url="https://api.openai.com/v1/responses",
             api_key_name="OPENAI_API_KEY",
             max_tokens=100,

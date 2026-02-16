@@ -563,6 +563,8 @@ def make_openai_responses_request_args(
             "effort": "high",
             "summary": "detailed",
         }
+    else:
+        data["reasoning"] = {"effort": "none"}
 
     if opts.max_tokens:
         data["max_output_tokens"] = opts.max_tokens
