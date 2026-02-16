@@ -53,3 +53,13 @@ Add `--brief/-b` flag to hide intermediate tool calls/results, showing only fina
 
 ### Use Case
 Useful when using buzzllm as a Claude Code skill - prevents flooding context with intermediate steps.
+
+## 2026-02-15: Iter 1 M1 Tool Catalog
+
+Timestamp: 2026-02-15
+Goal: Add tool catalog + helper for tool subset schemas.
+Changes: Added tool catalog mapping and schema builder; added unit tests for tool subset validation.
+Commands+Results: (none)
+Decisions: Keep tool catalog as a single mapping with per-tool descriptions.
+Next: Implement subagent runner + SSE parser.
+Checkpoint: 82170a5
