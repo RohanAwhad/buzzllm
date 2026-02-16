@@ -16,7 +16,7 @@ from .llm import (
 )
 from .prompts import prompts
 from .tools import utils, websearch, codesearch, pythonexec
-
+from . import subagent
 
 
 def parse_args():
@@ -52,7 +52,10 @@ def parse_args():
         "-S", "--sse", action="store_true", help="Enable SSE mode for printing"
     )
     parser.add_argument(
-        "-b", "--brief", action="store_true", help="Only print final output, hide tool calls and results"
+        "-b",
+        "--brief",
+        action="store_true",
+        help="Only print final output, hide tool calls and results",
     )
 
     return parser.parse_args()
@@ -142,6 +145,18 @@ async def chat(
             callable_to_schema(utils.AVAILABLE_TOOLS["python_execute"]),
         ]
 
+    if tools is not None:
+        subagent.configure_subagent_context(
+            model=model,
+            provider=provider,
+            url=url,
+            api_key_name=api_key_name,
+            think=think,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        utils.add_tool(subagent.call_subagent)
+        tools.append(callable_to_schema(utils.AVAILABLE_TOOLS["call_subagent"]))
 
     # Create LLM options
     opts = LLMOptions(
