@@ -63,3 +63,13 @@ Commands+Results: (none)
 Decisions: Keep tool catalog as a single mapping with per-tool descriptions.
 Next: Implement subagent runner + SSE parser.
 Checkpoint: 82170a5
+
+## 2026-02-15: Iter 1 M2 Subagent Runner
+
+Timestamp: 2026-02-15
+Goal: Add subagent runner + SSE output parser.
+Changes: Added subagent runner entrypoint and SSE output_text parser; added unit test for mixed SSE events.
+Commands+Results: (none)
+Decisions: Keep SSE parsing minimal and output_text-only for subagent output.
+Next: Add call_subagent tool and main wiring.
+Checkpoint: a2db6f5
