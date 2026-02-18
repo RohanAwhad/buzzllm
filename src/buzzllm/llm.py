@@ -21,6 +21,8 @@ class LLMOptions:
     think: bool = False
     tools: Optional[list[dict]] = None
     max_infer_iters: int = 10
+    output_mode: Optional[Literal["json_schema", "json_object"]] = None
+    output_schema: Optional[dict] = None
 
 
 @dataclass
@@ -41,8 +43,8 @@ class StreamResponse:
         "tool_result",
         "block_end",
         "response_end",
+        "output_structured",
     ]
-
 
     def to_json(self):
         return json.dumps(dataclasses.asdict(self))
@@ -68,6 +70,8 @@ class ToolCall:
 
 TOOL_CALLS: dict[str, ToolCall] = {}
 current_tool_call_id: str = ""
+last_openai_response_id: str = ""
+openai_responses_item_id_to_call_id: dict[str, str] = {}
 
 
 async def run_tools():
@@ -93,11 +97,13 @@ async def invoke_llm(
     """Invoke LLM with streaming response, printing StreamResponse objects to stdout as JSON"""
 
     request_args = make_request_args(opts, prompt, system_prompt)
-    messages = request_args.data.get("messages", [])
+    messages = request_args.data.get("messages")
+    inputs = request_args.data.get("input")
 
     try:
         while True:
             message_started = False
+            structured_output_buffer = "" if opts.output_mode else None
             # Make streaming request
             response = requests.post(
                 opts.url,
@@ -120,10 +126,24 @@ async def invoke_llm(
                         continue
                     if stream_response.type == "response_start":
                         message_started = True
+                    if opts.output_mode and stream_response.type == "output_text":
+                        structured_output_buffer = (
+                            structured_output_buffer or ""
+                        ) + stream_response.delta
+                        continue
+                    if opts.output_mode and stream_response.type == "block_end":
+                        continue
                     print_to_stdout(stream_response, sse, brief)
 
             # Perform tool calls
             if not TOOL_CALLS:
+                if opts.output_mode:
+                    structured_response = StreamResponse(
+                        id="",
+                        delta=structured_output_buffer or "",
+                        type="output_structured",
+                    )
+                    print_to_stdout(structured_response, sse, brief)
                 return
 
             await run_tools()
@@ -134,18 +154,21 @@ async def invoke_llm(
                     result_response = StreamResponse(
                         id=tc.id,
                         delta=f"\n\nTool Result ({tc.name}):\n{str(tc.result)}\n",
-                        type="tool_result"
+                        type="tool_result",
                     )
                     print_to_stdout(result_response, sse, brief)
 
             # Add tool call and response messages
-            add_tool_response(messages, TOOL_CALLS)
-            # tool_call_response_to_openai_messages(messages, TOOL_CALLS)
-            request_args.data["messages"] = messages
+            if messages is not None:
+                add_tool_response(messages, TOOL_CALLS)
+                request_args.data["messages"] = messages
+            elif inputs is not None:
+                add_tool_response(request_args, TOOL_CALLS)
+                inputs = request_args.data.get("input")
 
             # Clear tool calls for next iteration
             TOOL_CALLS.clear()
-
+            openai_responses_item_id_to_call_id.clear()
 
     except Exception as e:
         print(e)
@@ -158,11 +181,13 @@ async def invoke_llm(
         # Cleanup any running containers
         try:
             from .tools import pythonexec
+
             pythonexec.cleanup_python_exec()
         except ImportError:
             pass
-        print_to_stdout(StreamResponse(id="", delta="", type="response_end"), sse, brief)
-
+        print_to_stdout(
+            StreamResponse(id="", delta="", type="response_end"), sse, brief
+        )
 
 
 def print_to_stdout(data: StreamResponse, sse: bool, brief: bool = False) -> None:
@@ -192,7 +217,6 @@ def print_to_stdout(data: StreamResponse, sse: bool, brief: bool = False) -> Non
         print(data.delta, end="", flush=True)
 
 
-
 # LLM Specific funcs
 
 
@@ -202,7 +226,16 @@ def print_to_stdout(data: StreamResponse, sse: bool, brief: bool = False) -> Non
 def make_openai_request_args(
     opts: LLMOptions, prompt: str, system_prompt: str
 ) -> RequestArgs:
-    OPENAI_REASONING_MODELS=['gpt-5.2', 'gpt-5.1', 'gpt-5', 'gpt-5-mini', 'o4-mini', 'o3', 'o3-pro', 'gpt-5-pro']
+    OPENAI_REASONING_MODELS = [
+        "gpt-5.2",
+        "gpt-5.1",
+        "gpt-5",
+        "gpt-5-mini",
+        "o4-mini",
+        "o3",
+        "o3-pro",
+        "gpt-5-pro",
+    ]
     # json body
     data = {
         "messages": [
@@ -214,12 +247,26 @@ def make_openai_request_args(
     }
 
     if opts.model in OPENAI_REASONING_MODELS:
-        data['messages'][0]['role'] = 'developer'
+        data["messages"][0]["role"] = "developer"
         data["response_format"] = {"type": "text"}
-        data["reasoning_effort"] = "none" if opts.model == 'gpt-5.1' and not opts.think else "high" 
+        data["reasoning_effort"] = (
+            "none" if opts.model == "gpt-5.1" and not opts.think else "high"
+        )
     else:
         data["temperature"] = opts.temperature
         data["max_tokens"] = opts.max_tokens
+
+    if opts.output_mode == "json_schema" and opts.output_schema:
+        data["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "structured_output",
+                "schema": opts.output_schema,
+                "strict": True,
+            },
+        }
+    elif opts.output_mode == "json_object":
+        data["response_format"] = {"type": "json_object"}
 
     if opts.tools:
         data["tools"] = opts.tools
@@ -237,7 +284,6 @@ def make_openai_request_args(
 def handle_openai_stream_response(
     line: str, message_started: bool
 ) -> Generator[StreamResponse | None, None, None]:
-
     if not line.startswith("data: "):
         yield None
     data_content = line[len("data: ") :]  # Remove 'data: ' prefix
@@ -265,7 +311,9 @@ def handle_openai_stream_response(
             yield StreamResponse(id="", delta=delta["content"], type="output_text")
 
         # Handle reasoning content (for o1 models)
-        if ("reasoning" in delta and delta["reasoning"]) or ('reasoning_content' in delta and delta['reasoning_content']):
+        if ("reasoning" in delta and delta["reasoning"]) or (
+            "reasoning_content" in delta and delta["reasoning_content"]
+        ):
             yield StreamResponse(
                 id="", delta=delta["reasoning"], type="reasoning_content"
             )
@@ -356,6 +404,11 @@ def make_anthropic_request_args(
 
     if opts.tools:
         data["tools"] = opts.tools
+
+    if opts.output_mode and opts.output_schema:
+        data["output_config"] = {
+            "format": {"type": "json_schema", "schema": opts.output_schema}
+        }
 
     headers = {"Content-Type": "application/json"}
     if opts.api_key_name:
@@ -471,25 +524,57 @@ def tool_call_response_to_anthropic_messages(
 # ===
 
 
+def _convert_openai_responses_tools(tools: list[dict]) -> list[dict]:
+    converted = []
+    for tool in tools:
+        if tool.get("type") == "function" and "function" in tool:
+            function = tool.get("function", {})
+            converted.append(
+                {
+                    "type": "function",
+                    "name": function.get("name"),
+                    "description": function.get("description"),
+                    "parameters": function.get("parameters"),
+                }
+            )
+        else:
+            converted.append(tool)
+    return converted
+
+
 def make_openai_responses_request_args(
     opts: LLMOptions, prompt: str, system_prompt: str
 ) -> RequestArgs:
     data = {
         "model": opts.model,
-        "input": prompt,
+        "input": [
+            {
+                "role": "user",
+                "content": [{"type": "input_text", "text": prompt}],
+            }
+        ],
         "stream": True,
         "store": False,
-        "reasoning": {
-            "effort": "high",
-            "summary": "detailed"
-        }
+        "temperature": opts.temperature,
     }
+
+    if opts.think:
+        data["reasoning"] = {
+            "effort": "high",
+            "summary": "detailed",
+        }
+    else:
+        data["reasoning"] = {"effort": "none"}
+
+    if opts.max_tokens:
+        data["max_output_tokens"] = opts.max_tokens
 
     if system_prompt:
         data["instructions"] = system_prompt
 
     if opts.tools:
-        raise NotImplementedError("Tools with OpenAI Responses API has not yet been implemented")
+        data["tools"] = _convert_openai_responses_tools(opts.tools)
+        data["tool_choice"] = "auto"
 
     headers = {"Content-Type": "application/json"}
     if opts.api_key_name:
@@ -507,7 +592,7 @@ def handle_openai_responses_stream_response(
         yield None
         return
 
-    data_content = line[len("data: "):]
+    data_content = line[len("data: ") :]
 
     try:
         chunk_data = json.loads(data_content)
@@ -516,6 +601,8 @@ def handle_openai_responses_stream_response(
         # Handle response start
         if event_type == "response.created":
             response_id = chunk_data.get("response", {}).get("id", "")
+            global last_openai_response_id
+            last_openai_response_id = response_id
             yield StreamResponse(id=response_id, type="response_start", delta="")
 
         # Handle regular text content
@@ -528,6 +615,48 @@ def handle_openai_responses_stream_response(
             delta_text = chunk_data.get("delta", "")
             yield StreamResponse(id="", delta=delta_text, type="reasoning_content")
 
+        elif event_type == "response.output_item.added":
+            item = chunk_data.get("item", {})
+            item_type = item.get("type")
+            if item_type in ("tool_call", "function_call"):
+                item_id = item.get("id", "")
+                call_id = item.get("call_id") or item_id
+                tool_name = item.get("name", "")
+                if item_id:
+                    openai_responses_item_id_to_call_id[item_id] = call_id
+                TOOL_CALLS[call_id] = ToolCall(
+                    id=call_id, name=tool_name, arguments="", executed=False
+                )
+
+        elif event_type in (
+            "response.tool_call_arguments.delta",
+            "response.function_call_arguments.delta",
+        ):
+            item_id = (
+                chunk_data.get("item_id")
+                or chunk_data.get("tool_call_id")
+                or chunk_data.get("call_id")
+                or ""
+            )
+            call_id = openai_responses_item_id_to_call_id.get(item_id, item_id)
+            delta_text = chunk_data.get("delta", "")
+            if call_id in TOOL_CALLS:
+                TOOL_CALLS[call_id].arguments += delta_text
+            if delta_text:
+                yield StreamResponse(id="", delta=delta_text, type="tool_call")
+
+        elif event_type == "response.output_item.done":
+            item = chunk_data.get("item", {})
+            item_type = item.get("type")
+            if item_type in ("tool_call", "function_call"):
+                item_id = item.get("id", "")
+                call_id = item.get(
+                    "call_id"
+                ) or openai_responses_item_id_to_call_id.get(item_id, item_id)
+                arguments = item.get("arguments")
+                if call_id in TOOL_CALLS and arguments:
+                    TOOL_CALLS[call_id].arguments = arguments
+
         # Handle response completion
         elif event_type == "response.completed":
             yield StreamResponse(id="", delta="", type="block_end")
@@ -537,11 +666,23 @@ def handle_openai_responses_stream_response(
 
 
 def tool_call_response_to_openai_responses_messages(
-    messages: list, tool_calls: dict[str, ToolCall]
+    request_args: RequestArgs, tool_calls: dict[str, ToolCall]
 ):
-    # For now, reuse the same logic as OpenAI chat completions
-    # This may need adjustment based on how Responses API handles conversation state
-    tool_call_response_to_openai_messages(messages, tool_calls)
+    if not tool_calls:
+        return
+
+    request_args.data["previous_response_id"] = last_openai_response_id
+    tool_results = []
+    for tc in tool_calls.values():
+        tool_results.append(
+            {
+                "type": "tool_result",
+                "tool_call_id": tc.id,
+                "content": str(tc.result),
+            }
+        )
+
+    request_args.data["input"] = tool_results
 
 
 # ===
@@ -568,7 +709,14 @@ def make_vertexai_anthropic_request_args(
     if opts.tools:
         data["tools"] = opts.tools
 
+    if opts.output_mode and opts.output_schema:
+        data["output_config"] = {
+            "format": {"type": "json_schema", "schema": opts.output_schema}
+        }
+
     headers = {"Content-Type": "application/json"}
-    api_key = subprocess.run(['gcloud', 'auth', 'print-access-token'], capture_output=True, text=True)
+    api_key = subprocess.run(
+        ["gcloud", "auth", "print-access-token"], capture_output=True, text=True
+    )
     headers["Authorization"] = f"Bearer {api_key.stdout.strip()}"
     return RequestArgs(data=data, headers=headers)

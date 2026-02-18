@@ -8,6 +8,28 @@ def add_tool(func: Callable):
     AVAILABLE_TOOLS[func.__name__] = func
 
 
+def build_tool_schemas(
+    tool_subset: list[str], callable_to_schema: Callable
+) -> list[dict]:
+    from .catalog import TOOL_CATALOG
+
+    schemas = []
+    for tool_name in tool_subset:
+        if tool_name not in TOOL_CATALOG:
+            raise ValueError(f"Unknown tool name: {tool_name}")
+        tool_entry = TOOL_CATALOG[tool_name]
+        tool_func = tool_entry["callable"]
+        tool_desc = tool_entry.get("desc", "")
+
+        add_tool(tool_func)
+        if tool_desc:
+            schemas.append(callable_to_schema(tool_func, tool_desc))
+        else:
+            schemas.append(callable_to_schema(tool_func))
+
+    return schemas
+
+
 def callable_to_openai_schema(func, desc: str = ""):
     name = func.__name__
     description = desc or inspect.getdoc(func)

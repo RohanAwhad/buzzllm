@@ -1,20 +1,24 @@
 import pytest
 
+from typing import Any
+
 from buzzllm.llm import (
     ToolCall,
     tool_call_response_to_openai_messages,
     tool_call_response_to_anthropic_messages,
+    tool_call_response_to_openai_responses_messages,
+    RequestArgs,
 )
 
 
 class TestToolCallResponseToOpenaiMessages:
     def test_empty_tool_calls_no_op(self):
-        messages = [{"role": "user", "content": "hello"}]
+        messages: list[dict[str, Any]] = [{"role": "user", "content": "hello"}]
         tool_call_response_to_openai_messages(messages, {})
         assert len(messages) == 1
 
     def test_single_tool_call(self):
-        messages = [{"role": "user", "content": "hello"}]
+        messages: list[dict[str, Any]] = [{"role": "user", "content": "hello"}]
         tool_calls = {
             "call_1": ToolCall(
                 id="call_1",
@@ -34,7 +38,9 @@ class TestToolCallResponseToOpenaiMessages:
         assert messages[1]["tool_calls"][0]["id"] == "call_1"
         assert messages[1]["tool_calls"][0]["type"] == "function"
         assert messages[1]["tool_calls"][0]["function"]["name"] == "search_web"
-        assert messages[1]["tool_calls"][0]["function"]["arguments"] == '{"query": "test"}'
+        assert (
+            messages[1]["tool_calls"][0]["function"]["arguments"] == '{"query": "test"}'
+        )
 
         # Tool result message
         assert messages[2]["role"] == "tool"
@@ -42,7 +48,7 @@ class TestToolCallResponseToOpenaiMessages:
         assert messages[2]["content"] == "Found results"
 
     def test_multiple_tool_calls(self):
-        messages = []
+        messages: list[dict[str, Any]] = []
         tool_calls = {
             "call_1": ToolCall(
                 id="call_1", name="func1", arguments="{}", executed=True, result="res1"
@@ -61,7 +67,7 @@ class TestToolCallResponseToOpenaiMessages:
         assert messages[2]["role"] == "tool"
 
     def test_preserves_existing_messages(self):
-        messages = [
+        messages: list[dict[str, Any]] = [
             {"role": "system", "content": "sys"},
             {"role": "user", "content": "user"},
         ]
@@ -81,12 +87,12 @@ class TestToolCallResponseToOpenaiMessages:
 
 class TestToolCallResponseToAnthropicMessages:
     def test_empty_tool_calls_no_op(self):
-        messages = [{"role": "user", "content": "hello"}]
+        messages: list[dict[str, Any]] = [{"role": "user", "content": "hello"}]
         tool_call_response_to_anthropic_messages(messages, {})
         assert len(messages) == 1
 
     def test_single_tool_call(self):
-        messages = [{"role": "user", "content": "hello"}]
+        messages: list[dict[str, Any]] = [{"role": "user", "content": "hello"}]
         tool_calls = {
             "tool_1": ToolCall(
                 id="tool_1",
@@ -116,7 +122,7 @@ class TestToolCallResponseToAnthropicMessages:
         assert messages[2]["content"][0]["content"] == "Search result"
 
     def test_multiple_tool_calls(self):
-        messages = []
+        messages: list[dict[str, Any]] = []
         tool_calls = {
             "t1": ToolCall(
                 id="t1", name="f1", arguments='{"a": 1}', executed=True, result="r1"
@@ -134,7 +140,7 @@ class TestToolCallResponseToAnthropicMessages:
         assert len(messages[1]["content"]) == 2  # 2 tool_result blocks
 
     def test_arguments_parsed_to_dict(self):
-        messages = []
+        messages: list[dict[str, Any]] = []
         tool_calls = {
             "t1": ToolCall(
                 id="t1",
@@ -150,3 +156,36 @@ class TestToolCallResponseToAnthropicMessages:
         input_obj = messages[0]["content"][0]["input"]
         assert input_obj["nested"]["key"] == "value"
         assert input_obj["list"] == [1, 2, 3]
+
+
+class TestToolCallResponseToOpenaiResponsesMessages:
+    def test_empty_tool_calls_no_op(self):
+        request_args = RequestArgs(data={"input": []}, headers={})
+        tool_call_response_to_openai_responses_messages(request_args, {})
+        assert request_args.data["input"] == []
+
+    def test_tool_results_payload(self):
+        request_args = RequestArgs(data={"input": []}, headers={})
+        tool_calls = {
+            "call_1": ToolCall(
+                id="call_1",
+                name="search_web",
+                arguments='{"query": "test"}',
+                executed=True,
+                result="Result",
+            )
+        }
+
+        from buzzllm import llm as llm_module
+
+        llm_module.last_openai_response_id = "resp_123"
+
+        tool_call_response_to_openai_responses_messages(request_args, tool_calls)
+        assert request_args.data["previous_response_id"] == "resp_123"
+        assert request_args.data["input"] == [
+            {
+                "type": "tool_result",
+                "tool_call_id": "call_1",
+                "content": "Result",
+            }
+        ]

@@ -6,6 +6,7 @@ from buzzllm.llm import (
     handle_anthropic_stream_response,
     handle_openai_responses_stream_response,
     TOOL_CALLS,
+    ToolCall,
 )
 
 
@@ -128,7 +129,10 @@ class TestHandleAnthropicStreamResponse:
         list(handle_anthropic_stream_response(f"data: {json.dumps(start_data)}", True))
 
         # Then send partial JSON
-        delta_data = {"type": "content_block_delta", "delta": {"partial_json": '{"x": 1}'}}
+        delta_data = {
+            "type": "content_block_delta",
+            "delta": {"partial_json": '{"x": 1}'},
+        }
         results = list(
             handle_anthropic_stream_response(f"data: {json.dumps(delta_data)}", True)
         )
@@ -190,6 +194,71 @@ class TestHandleOpenaiResponsesStreamResponse:
 
         ends = [r for r in results if r and r.type == "block_end"]
         assert len(ends) == 1
+
+    def test_tool_call_added(self):
+        data = {
+            "type": "response.output_item.added",
+            "item": {
+                "type": "function_call",
+                "id": "fc_1",
+                "call_id": "call_1",
+                "name": "search_web",
+            },
+        }
+        line = f"data: {json.dumps(data)}"
+        list(handle_openai_responses_stream_response(line, True))
+
+        assert "call_1" in TOOL_CALLS
+        assert TOOL_CALLS["call_1"].name == "search_web"
+
+    def test_tool_call_arguments_delta(self):
+        list(
+            handle_openai_responses_stream_response(
+                f"data: {json.dumps({'type': 'response.output_item.added', 'item': {'type': 'function_call', 'id': 'fc_2', 'call_id': 'call_2', 'name': 'tool'}})}",
+                True,
+            )
+        )
+        data = {
+            "type": "response.function_call_arguments.delta",
+            "item_id": "fc_2",
+            "delta": '{"q": "test"}',
+        }
+        line = f"data: {json.dumps(data)}"
+        results = list(handle_openai_responses_stream_response(line, True))
+
+        assert TOOL_CALLS["call_2"].arguments == '{"q": "test"}'
+        tool_calls = [r for r in results if r and r.type == "tool_call"]
+        assert len(tool_calls) == 1
+
+    def test_tool_call_done_sets_arguments(self):
+        added = {
+            "type": "response.output_item.added",
+            "item": {
+                "type": "function_call",
+                "id": "fc_3",
+                "call_id": "call_3",
+                "name": "tool",
+            },
+        }
+        list(
+            handle_openai_responses_stream_response(
+                f"data: {json.dumps(added)}",
+                True,
+            )
+        )
+        data = {
+            "type": "response.output_item.done",
+            "item": {
+                "type": "function_call",
+                "id": "fc_3",
+                "call_id": "call_3",
+                "arguments": "{}",
+            },
+        }
+        line = f"data: {json.dumps(data)}"
+        list(handle_openai_responses_stream_response(line, True))
+
+        assert TOOL_CALLS["call_3"].arguments == "{}"
 
     def test_invalid_json_yields_none(self):
         line = "data: broken{"

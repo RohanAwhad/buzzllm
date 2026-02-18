@@ -107,6 +107,32 @@ class TestMakeOpenaiRequestArgs:
 
         assert args.data["reasoning_effort"] == "high"
 
+    def test_structured_output_json_schema(self, env_with_api_keys):
+        schema = {"type": "object", "properties": {"name": {"type": "string"}}}
+        opts = LLMOptions(
+            model="gpt-4o-mini",
+            url="https://api.openai.com/v1/chat/completions",
+            api_key_name="OPENAI_API_KEY",
+            output_mode="json_schema",
+            output_schema=schema,
+        )
+        args = make_openai_request_args(opts, "Hello", "System")
+
+        response_format = args.data["response_format"]
+        assert response_format["type"] == "json_schema"
+        assert response_format["json_schema"]["schema"] == schema
+
+    def test_structured_output_json_object(self, env_with_api_keys):
+        opts = LLMOptions(
+            model="gpt-4o-mini",
+            url="https://api.openai.com/v1/chat/completions",
+            api_key_name="OPENAI_API_KEY",
+            output_mode="json_object",
+        )
+        args = make_openai_request_args(opts, "Hello", "System")
+
+        assert args.data["response_format"] == {"type": "json_object"}
+
 
 class TestMakeAnthropicRequestArgs:
     def test_basic_request_structure(self, env_with_api_keys):
@@ -170,6 +196,19 @@ class TestMakeAnthropicRequestArgs:
 
         assert args.data["tools"] == tools
 
+    def test_structured_output_config(self, env_with_api_keys):
+        schema = {"type": "object", "properties": {"a": {"type": "integer"}}}
+        opts = LLMOptions(
+            model="claude-sonnet-4-20250514",
+            url="https://api.anthropic.com/v1/messages",
+            api_key_name="ANTHROPIC_API_KEY",
+            output_mode="json_schema",
+            output_schema=schema,
+        )
+        args = make_anthropic_request_args(opts, "Hello", "System")
+
+        assert args.data["output_config"]["format"]["schema"] == schema
+
 
 class TestMakeVertexaiAnthropicRequestArgs:
     @patch("subprocess.run")
@@ -215,6 +254,21 @@ class TestMakeVertexaiAnthropicRequestArgs:
         assert args.data["max_tokens"] == 32000
         assert args.data["thinking"]["type"] == "enabled"
 
+    @patch("subprocess.run")
+    def test_structured_output_config(self, mock_run, env_with_api_keys):
+        mock_run.return_value = MagicMock(stdout="token\n")
+        schema = {"type": "object", "properties": {"a": {"type": "integer"}}}
+
+        opts = LLMOptions(
+            model="claude-3-5-sonnet@20240620",
+            url="https://us-central1-aiplatform.googleapis.com/...",
+            output_mode="json_schema",
+            output_schema=schema,
+        )
+        args = make_vertexai_anthropic_request_args(opts, "Hello", "System")
+
+        assert args.data["output_config"]["format"]["schema"] == schema
+
 
 class TestMakeOpenaiResponsesRequestArgs:
     def test_basic_request_structure(self, env_with_api_keys):
@@ -226,19 +280,48 @@ class TestMakeOpenaiResponsesRequestArgs:
         args = make_openai_responses_request_args(opts, "Hello", "Instructions")
 
         assert args.data["model"] == "o3"
-        assert args.data["input"] == "Hello"
+        assert args.data["input"][0]["role"] == "user"
+        assert args.data["input"][0]["content"][0]["type"] == "input_text"
+        assert args.data["input"][0]["content"][0]["text"] == "Hello"
         assert args.data["instructions"] == "Instructions"
         assert args.data["stream"] is True
         assert args.data["store"] is False
-        assert args.data["reasoning"]["effort"] == "high"
+        assert args.data["reasoning"]["effort"] == "none"
 
-    def test_tools_not_implemented(self, env_with_api_keys):
+    def test_tools_are_included(self, env_with_api_keys):
+        tools = [{"type": "function", "function": {"name": "test"}}]
         opts = LLMOptions(
             model="o3",
             url="https://api.openai.com/v1/responses",
             api_key_name="OPENAI_API_KEY",
-            tools=[{"name": "test"}],
+            tools=tools,
         )
 
-        with pytest.raises(NotImplementedError):
-            make_openai_responses_request_args(opts, "Hello", "System")
+        args = make_openai_responses_request_args(opts, "Hello", "System")
+        assert args.data["tools"][0]["name"] == "test"
+        assert args.data["tool_choice"] == "auto"
+
+    def test_reasoning_mode(self, env_with_api_keys):
+        opts = LLMOptions(
+            model="o3",
+            url="https://api.openai.com/v1/responses",
+            api_key_name="OPENAI_API_KEY",
+            think=True,
+        )
+
+        args = make_openai_responses_request_args(opts, "Hello", "System")
+        assert args.data["reasoning"]["effort"] == "high"
+        assert args.data["reasoning"]["summary"] == "detailed"
+
+    def test_max_output_tokens_and_temperature(self, env_with_api_keys):
+        opts = LLMOptions(
+            model="o3",
+            url="https://api.openai.com/v1/responses",
+            api_key_name="OPENAI_API_KEY",
+            max_tokens=2048,
+            temperature=0.3,
+        )
+
+        args = make_openai_responses_request_args(opts, "Hello", "System")
+        assert args.data["max_output_tokens"] == 2048
+        assert args.data["temperature"] == 0.3

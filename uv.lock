@@ -279,12 +279,15 @@ wheels = [
 
 [[package]]
 name = "buzzllm"
-version = "0.2.3"
+version = "0.2.6"
 source = { virtual = "." }
 dependencies = [
+    { name = "beautifulsoup4" },
     { name = "crawl4ai" },
     { name = "docker" },
+    { name = "httpx" },
     { name = "loguru" },
+    { name = "pydantic" },
     { name = "requests" },
     { name = "tenacity" },
 ]
@@ -307,9 +310,12 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "beautifulsoup4", specifier = ">=4.0.0" },
     { name = "crawl4ai" },
     { name = "docker" },
+    { name = "httpx", specifier = ">=0.28.0" },
     { name = "loguru" },
+    { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.24.0" },
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=4.1.0" },
