@@ -1,5 +1,9 @@
 import argparse
 import asyncio
+from loguru import logger
+logger.remove()
+logger.add("/tmp/buzzllm.logs", rotation="10 MB", retention=5, enqueue=True)
+
 from .llm import (
     LLMOptions,
     invoke_llm,

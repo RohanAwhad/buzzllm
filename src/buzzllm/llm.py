@@ -5,8 +5,9 @@ import os
 import requests
 import subprocess
 
-from typing import Generator, Optional, Callable, Literal, Any
 from dataclasses import dataclass
+from loguru import logger
+from typing import Generator, Optional, Callable, Literal, Any
 
 from .tools import utils
 
@@ -106,6 +107,7 @@ async def invoke_llm(
                 stream=True,
                 timeout=900,
             )
+            if response.status_code != 200: logger.error(response.text)
             response.raise_for_status()
 
             # Process streaming response
@@ -148,7 +150,7 @@ async def invoke_llm(
 
 
     except Exception as e:
-        print(e)
+        logger.exception(e)
         # Print error as StreamResponse
         error_response = StreamResponse(
             id="", delta=f"Error: {str(e)}", type="block_end"
