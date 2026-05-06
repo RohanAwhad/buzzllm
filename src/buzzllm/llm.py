@@ -213,7 +213,7 @@ def make_openai_request_args(
         "stream": True,
     }
 
-    if opts.model in OPENAI_REASONING_MODELS:
+    if opts.model in OPENAI_REASONING_MODELS or opts.model.startswith('gpt-5'):
         data['messages'][0]['role'] = 'developer'
         data["response_format"] = {"type": "text"}
         data["reasoning_effort"] = "none" if opts.model == 'gpt-5.1' and not opts.think else "high" 
