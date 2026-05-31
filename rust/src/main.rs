@@ -54,7 +54,7 @@ struct Cli {
 fn init_logging() {
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
-    let file_appender = tracing_appender::rolling::never("/tmp", "buzzllm.logs");
+    let file_appender = tracing_appender::rolling::daily("/tmp", "buzzllm.logs");
 
     tracing_subscriber::registry()
         .with(fmt::layer().with_writer(file_appender).with_ansi(false))
