@@ -1,0 +1,51 @@
+---
+title: "BuzzLLM — Chat Flow Sequence (L3)"
+---
+sequenceDiagram
+    participant User
+    participant main as main.rs
+    participant prompts as prompts mod
+    participant registry as ToolRegistry
+    participant llm as invoke_llm
+    participant provider as Provider
+    participant output as print_to_stdout
+    participant api as LLM API
+
+    User->>main: CLI args (model, url, prompt, provider, ...)
+    main->>prompts: get_prompt(system_prompt)
+    prompts-->>main: resolved prompt text
+
+    main->>registry: register tools based on --system-prompt name
+    registry-->>main: tool schemas (OpenAI or Anthropic format)
+
+    main->>main: construct LlmOptions
+    main->>llm: invoke_llm(opts, prompt, system_prompt, provider, registry, sse, brief)
+
+    loop for each iteration (max_infer_iters)
+        llm->>provider: make_request_args(opts, prompt, system_prompt)
+        provider-->>llm: RequestArgs (data + headers)
+
+        llm->>api: POST streaming request (reqwest, timeout=900s)
+        api-->>llm: SSE byte stream
+
+        loop for each SSE line
+            llm->>provider: parse_sse_line(line, message_started, tool_calls, current_id)
+            provider-->>llm: Vec of StreamResponse
+            llm->>output: print_to_stdout(response, sse, brief)
+            output-->>User: colored text or SSE events
+        end
+
+        alt no tool_calls
+            Note over llm: break — done
+        else has tool_calls
+            llm->>registry: execute each tool concurrently
+            registry-->>llm: tool results
+            llm->>output: print tool results
+            llm->>provider: assemble_tool_messages(messages, tool_calls)
+            Note over llm: clear tool_calls, loop
+        end
+    end
+
+    llm->>registry: cleanup (kills pythonexec container if running)
+    llm->>output: print ResponseEnd
+    output-->>User: === [ DONE ] ===

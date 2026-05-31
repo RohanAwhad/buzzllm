@@ -1,0 +1,52 @@
+---
+title: "BuzzLLM Rust Binary — Component Diagram (L3)"
+---
+graph TD
+    subgraph BINARY["buzzllm binary"]
+        MAIN[main.rs<br/><i>clap CLI + chat()</i><br/>Parses args, inits logging,<br/>wires providers and tools]
+
+        TYPES[types.rs<br/><i>core data types</i><br/>LlmOptions, RequestArgs,<br/>StreamResponse, ToolCallData]
+
+        PROMPTS[prompts mod<br/><i>include_str! .txt files</i><br/>6 prompt templates:<br/>codesearch, generate, hackhub,<br/>helpful, replace, websearch]
+
+        OUTPUT[output.rs<br/><i>print_to_stdout</i><br/>ANSI colors, SSE mode,<br/>brief mode]
+
+        LLM[llm.rs<br/><i>invoke_llm loop</i><br/>SSE streaming via reqwest,<br/>tool execution, iteration cap]
+
+        subgraph PROVIDERS["providers mod"]
+            PMOD[mod.rs<br/><i>Provider enum + dispatch</i>]
+            OC[openai_chat.rs<br/><i>request builder + SSE parser<br/>+ message assembler</i>]
+            OR[openai_responses.rs<br/><i>request builder + SSE parser</i>]
+            AN[anthropic.rs<br/><i>request builder + SSE parser<br/>+ message assembler</i>]
+            VA[vertexai_anthropic.rs<br/><i>request builder (gcloud auth)</i>]
+        end
+
+        subgraph TOOLS["tools mod"]
+            TMOD[mod.rs<br/><i>Tool trait + ToolRegistry</i>]
+            CS[codesearch.rs<br/><i>BashFind, BashRipgrep, BashRead</i><br/>subprocess via tokio::process]
+            WS[websearch.rs<br/><i>SearchWeb, ScrapeWebpage</i><br/>DDG + Brave + HTML-to-markdown]
+            PE[pythonexec.rs<br/><i>PythonExecute</i><br/>bollard Docker + TCP socket]
+        end
+    end
+
+    MAIN -->|"resolves prompt"| PROMPTS
+    MAIN -->|"selects provider"| PMOD
+    MAIN -->|"registers tools"| TMOD
+    MAIN -->|"constructs"| TYPES
+    MAIN -->|"calls"| LLM
+
+    LLM -->|"builds request"| PMOD
+    LLM -->|"parses SSE lines"| PMOD
+    LLM -->|"assembles tool msgs"| PMOD
+    LLM -->|"prints responses"| OUTPUT
+    LLM -->|"executes tool calls"| TMOD
+    LLM -->|"reads/writes"| TYPES
+
+    PMOD -->|"delegates"| OC
+    PMOD -->|"delegates"| OR
+    PMOD -->|"delegates"| AN
+    PMOD -->|"delegates (SSE reuses anthropic)"| VA
+
+    TMOD -->|"dispatches"| CS
+    TMOD -->|"dispatches"| WS
+    TMOD -->|"dispatches"| PE

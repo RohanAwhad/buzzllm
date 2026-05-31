@@ -1,0 +1,40 @@
+---
+title: "BuzzLLM — Container Diagram (L2)"
+---
+graph TD
+    DEV([Developer])
+
+    subgraph LOCAL["Local Machine"]
+        BUZZ[buzzllm<br/><i>Rust static binary</i><br/>CLI: clap, streaming: reqwest,<br/>logging: tracing to /tmp/buzzllm.logs]
+
+        PYCONTAINER[pyexec container<br/><i>Docker: buzz/python-exec:latest</i><br/>Persistent IPython kernel on port 8787]
+
+        DOCKER_D[Docker Daemon<br/><i>bollard API</i>]
+
+        LOGFILE[(/tmp/buzzllm.logs<br/><i>tracing-appender</i>)]
+    end
+
+    subgraph LLM_PROVIDERS["LLM Provider APIs"]
+        OAI_CHAT[OpenAI Chat<br/><i>v1/chat/completions</i>]
+        OAI_RESP[OpenAI Responses<br/><i>v1/responses</i>]
+        ANTH[Anthropic<br/><i>v1/messages</i>]
+        VERT[Vertex AI Anthropic<br/><i>GCP endpoint</i>]
+    end
+
+    subgraph SEARCH["Search APIs"]
+        DDG[DuckDuckGo Lite<br/><i>HTML</i>]
+        BRAVE[Brave Search<br/><i>JSON REST</i>]
+    end
+
+    DEV -->|"CLI args"| BUZZ
+    BUZZ -->|"colored text or SSE"| DEV
+    BUZZ -->|"POST JSON, SSE stream"| OAI_CHAT
+    BUZZ -->|"POST JSON, SSE stream"| OAI_RESP
+    BUZZ -->|"POST JSON, SSE stream"| ANTH
+    BUZZ -->|"POST JSON, SSE stream"| VERT
+    BUZZ -->|"GET HTML"| DDG
+    BUZZ -->|"GET JSON"| BRAVE
+    BUZZ -->|"create, start, kill"| DOCKER_D
+    DOCKER_D -->|"runs"| PYCONTAINER
+    BUZZ -->|"TCP JSON on localhost:port"| PYCONTAINER
+    BUZZ -->|"append debug logs"| LOGFILE

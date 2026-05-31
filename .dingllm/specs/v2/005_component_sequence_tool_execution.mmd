@@ -1,0 +1,51 @@
+---
+title: "BuzzLLM — Tool Execution Cycle (L3)"
+---
+sequenceDiagram
+    participant llm as invoke_llm
+    participant registry as ToolRegistry
+    participant tool as Tool impl
+    participant subprocess as rg or find
+    participant ddg as DuckDuckGo
+    participant brave as Brave API
+    participant docker as Docker daemon
+    participant container as pyexec container
+
+    Note over llm: LLM response contained tool_calls
+
+    llm->>registry: run_tools(tool_calls, registry)
+
+    par concurrent tool execution
+        registry->>tool: execute(args) — e.g. BashRipgrep
+        tool->>subprocess: tokio::process::Command (timeout 30s)
+        subprocess-->>tool: stdout lines
+        tool->>tool: validate_path + paginate_results
+        tool-->>registry: JSON result
+
+    and
+        registry->>tool: execute(args) — e.g. SearchWeb
+        tool->>ddg: GET lite.duckduckgo.com (reqwest)
+        alt DDG success
+            ddg-->>tool: HTML response
+            tool->>tool: parse with scraper crate
+        else DDG bot detection or failure
+            tool->>brave: GET api.search.brave.com
+            brave-->>tool: JSON results
+        end
+        tool-->>registry: JSON array of results
+
+    and
+        registry->>tool: execute(args) — e.g. PythonExecute
+        tool->>docker: create + start container (bollard)
+        docker-->>tool: container running on localhost:port
+        tool->>container: TCP send JSON code
+        container-->>tool: JSON stdout + stderr + result
+        tool->>tool: truncate if over 10000 chars
+        tool-->>registry: JSON result
+    end
+
+    registry-->>llm: all results collected
+
+    llm->>llm: print tool results as StreamResponse(ToolResult)
+    llm->>llm: assemble_tool_messages into conversation
+    Note over llm: loop back to POST next LLM request
