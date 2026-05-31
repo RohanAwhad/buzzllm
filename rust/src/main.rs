@@ -1,14 +1,8 @@
-mod types;
-mod providers;
-mod tools;
-mod prompts;
-mod output;
-mod llm;
-
 use clap::Parser;
-use providers::Provider;
-use tools::ToolRegistry;
-use types::LlmOptions;
+use buzzllm::providers::{self, ToolSchemaFormat};
+use buzzllm::tools::ToolRegistry;
+use buzzllm::types::LlmOptions;
+use buzzllm::{prompts, llm};
 
 #[derive(Parser, Debug)]
 #[command(name = "buzzllm", about = "Invoke LLM with streaming response")]
@@ -16,8 +10,9 @@ struct Cli {
     /// LLM model name
     model: String,
 
-    /// LLM API URL
-    url: String,
+    /// LLM API URL (optional — uses provider default if not set)
+    #[arg(long)]
+    url: Option<String>,
 
     /// User prompt
     prompt: String,
@@ -75,7 +70,7 @@ fn init_logging() {
 }
 
 async fn chat(args: Cli) {
-    let provider = match Provider::from_str(&args.provider) {
+    let client = match providers::create_client(&args.provider) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("Error: {}", e);
@@ -85,38 +80,44 @@ async fn chat(args: Cli) {
 
     let original_system_prompt = args.system_prompt.clone();
 
-    // Resolve system prompt: check if it's a known prompt name, otherwise use as literal text
     let system_prompt = prompts::get_prompt(&args.system_prompt)
         .unwrap_or(&args.system_prompt);
 
-    // Register tools based on system prompt name
     let mut registry = ToolRegistry::new();
     let tools: Option<Vec<serde_json::Value>> = match original_system_prompt.as_str() {
         "websearch" => {
-            registry.register(Box::new(tools::websearch::SearchWeb));
-            registry.register(Box::new(tools::websearch::ScrapeWebpage));
-            Some(if provider.is_anthropic_format() {
-                registry.anthropic_schemas()
-            } else {
-                registry.openai_schemas()
+            registry.register(Box::new(buzzllm::tools::websearch::SearchWeb));
+            registry.register(Box::new(buzzllm::tools::websearch::ScrapeWebpage));
+            Some(match client.tool_schema_format() {
+                ToolSchemaFormat::Anthropic => registry.anthropic_schemas(),
+                ToolSchemaFormat::OpenAI => registry.openai_schemas(),
             })
         }
         "codesearch" => {
-            registry.register(Box::new(tools::codesearch::BashFind));
-            registry.register(Box::new(tools::codesearch::BashRipgrep));
-            registry.register(Box::new(tools::codesearch::BashRead));
-            Some(if provider.is_anthropic_format() {
-                registry.anthropic_schemas()
-            } else {
-                registry.openai_schemas()
+            registry.register(Box::new(buzzllm::tools::codesearch::BashFind));
+            registry.register(Box::new(buzzllm::tools::codesearch::BashRipgrep));
+            registry.register(Box::new(buzzllm::tools::codesearch::BashRead));
+            Some(match client.tool_schema_format() {
+                ToolSchemaFormat::Anthropic => registry.anthropic_schemas(),
+                ToolSchemaFormat::OpenAI => registry.openai_schemas(),
+            })
+        }
+        "coding" => {
+            registry.register(Box::new(buzzllm::tools::codesearch::BashRead));
+            registry.register(Box::new(buzzllm::tools::write_file::WriteFile));
+            registry.register(Box::new(buzzllm::tools::bash::Bash));
+            registry.register(Box::new(buzzllm::tools::websearch::SearchWeb));
+            registry.register(Box::new(buzzllm::tools::websearch::ScrapeWebpage));
+            Some(match client.tool_schema_format() {
+                ToolSchemaFormat::Anthropic => registry.anthropic_schemas(),
+                ToolSchemaFormat::OpenAI => registry.openai_schemas(),
             })
         }
         "pythonexec" => {
-            registry.register(Box::new(tools::pythonexec::PythonExecute::new()));
-            Some(if provider.is_anthropic_format() {
-                registry.anthropic_schemas()
-            } else {
-                registry.openai_schemas()
+            registry.register(Box::new(buzzllm::tools::pythonexec::PythonExecute::new()));
+            Some(match client.tool_schema_format() {
+                ToolSchemaFormat::Anthropic => registry.anthropic_schemas(),
+                ToolSchemaFormat::OpenAI => registry.openai_schemas(),
             })
         }
         _ => None,
@@ -124,7 +125,7 @@ async fn chat(args: Cli) {
 
     let opts = LlmOptions {
         model: args.model,
-        url: args.url,
+        url: args.url.unwrap_or_default(),
         api_key_name: Some(args.api_key_name),
         max_tokens: Some(args.max_tokens),
         temperature: args.temperature,
@@ -133,7 +134,7 @@ async fn chat(args: Cli) {
         max_infer_iters: 10,
     };
 
-    llm::invoke_llm(&opts, &args.prompt, system_prompt, &provider, &registry, args.sse, args.brief).await;
+    llm::invoke_llm(&opts, &args.prompt, system_prompt, client.as_ref(), &registry, args.sse, args.brief).await;
 }
 
 #[tokio::main]
@@ -141,4 +142,143 @@ async fn main() {
     init_logging();
     let args = Cli::parse();
     chat(args).await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn test_parse_minimal_args() {
+        let args = Cli::try_parse_from([
+            "buzzllm", "gpt-4", "hello",
+            "--provider", "openai-chat",
+            "--api-key-name", "KEY",
+        ]).unwrap();
+        assert_eq!(args.model, "gpt-4");
+        assert_eq!(args.prompt, "hello");
+        assert_eq!(args.provider, "openai-chat");
+        assert_eq!(args.api_key_name, "KEY");
+    }
+
+    #[test]
+    fn test_defaults() {
+        let args = Cli::try_parse_from([
+            "buzzllm", "gpt-4", "hello",
+            "--provider", "openai-chat",
+            "--api-key-name", "KEY",
+        ]).unwrap();
+        assert_eq!(args.max_tokens, 8192);
+        assert_eq!(args.temperature, 0.8);
+        assert!(!args.think);
+        assert!(!args.sse);
+        assert!(!args.brief);
+        assert!(args.url.is_none());
+    }
+
+    #[test]
+    fn test_custom_max_tokens() {
+        let args = Cli::try_parse_from([
+            "buzzllm", "gpt-4", "hello",
+            "--provider", "openai-chat",
+            "--api-key-name", "KEY",
+            "--max-tokens", "4096",
+        ]).unwrap();
+        assert_eq!(args.max_tokens, 4096);
+    }
+
+    #[test]
+    fn test_custom_temperature() {
+        let args = Cli::try_parse_from([
+            "buzzllm", "gpt-4", "hello",
+            "--provider", "openai-chat",
+            "--api-key-name", "KEY",
+            "--temperature", "0.5",
+        ]).unwrap();
+        assert_eq!(args.temperature, 0.5);
+    }
+
+    #[test]
+    fn test_think_flag() {
+        let args = Cli::try_parse_from([
+            "buzzllm", "gpt-4", "hello",
+            "--provider", "openai-chat",
+            "--api-key-name", "KEY",
+            "--think",
+        ]).unwrap();
+        assert!(args.think);
+    }
+
+    #[test]
+    fn test_sse_short_flag() {
+        let args = Cli::try_parse_from([
+            "buzzllm", "gpt-4", "hello",
+            "--provider", "openai-chat",
+            "--api-key-name", "KEY",
+            "-S",
+        ]).unwrap();
+        assert!(args.sse);
+    }
+
+    #[test]
+    fn test_brief_flag() {
+        let args = Cli::try_parse_from([
+            "buzzllm", "gpt-4", "hello",
+            "--provider", "openai-chat",
+            "--api-key-name", "KEY",
+            "-b",
+        ]).unwrap();
+        assert!(args.brief);
+    }
+
+    #[test]
+    fn test_url_flag() {
+        let args = Cli::try_parse_from([
+            "buzzllm", "gpt-4", "hello",
+            "--provider", "openai-chat",
+            "--api-key-name", "KEY",
+            "--url", "https://custom.example.com/v1",
+        ]).unwrap();
+        assert_eq!(args.url.unwrap(), "https://custom.example.com/v1");
+    }
+
+    #[test]
+    fn test_all_providers_accepted() {
+        for p in &["openai-chat", "openai-responses", "anthropic", "vertexai-anthropic"] {
+            let args = Cli::try_parse_from([
+                "buzzllm", "gpt-4", "hello",
+                "--provider", p,
+                "--api-key-name", "KEY",
+            ]).unwrap();
+            assert_eq!(args.provider, *p);
+        }
+    }
+
+    #[test]
+    fn test_invalid_provider_rejected() {
+        let result = Cli::try_parse_from([
+            "buzzllm", "gpt-4", "hello",
+            "--provider", "invalid-provider",
+            "--api-key-name", "KEY",
+        ]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_missing_provider_rejected() {
+        let result = Cli::try_parse_from([
+            "buzzllm", "gpt-4", "hello",
+            "--api-key-name", "KEY",
+        ]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_missing_model_rejected() {
+        let result = Cli::try_parse_from([
+            "buzzllm", "--provider", "openai-chat",
+        ]);
+        assert!(result.is_err());
+    }
 }

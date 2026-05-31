@@ -24,3 +24,9 @@ scraper = "0.22"
 tokio-retry = "0.3"
 regex = "1"
 uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+assert_cmd = "2.2.2"
+predicates = "3.1.4"
+tempfile = "3.27.0"
+tokio-test = "0.4.5"
