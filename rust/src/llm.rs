@@ -121,17 +121,19 @@ pub async fn invoke_llm(
             run_tools(&mut tool_calls, registry).await;
 
             for tc in tool_calls.values() {
-                if tc.executed && tc.result.is_some() {
-                    let result_response = StreamResponse::new(
-                        &tc.id,
-                        format!(
-                            "\n\nTool Result ({}):\n{}\n",
-                            tc.name,
-                            tc.result.as_ref().unwrap()
-                        ),
-                        StreamResponseType::ToolResult,
-                    );
-                    print_to_stdout(&result_response, sse, brief);
+                if tc.executed {
+                    if let Some(ref result) = tc.result {
+                        let result_response = StreamResponse::new(
+                            &tc.id,
+                            format!(
+                                "\n\nTool Result ({}):\n{}\n",
+                                tc.name,
+                                result
+                            ),
+                            StreamResponseType::ToolResult,
+                        );
+                        print_to_stdout(&result_response, sse, brief);
+                    }
                 }
             }
 
