@@ -1,0 +1,29 @@
+---
+title: "BuzzLLM — System Context (L1)"
+---
+graph TD
+    DEV([Developer<br/>Runs CLI from terminal])
+
+    subgraph SYS["BuzzLLM System"]
+        BUZZ[buzzllm<br/><i>Rust CLI binary</i><br/>Streams LLM responses with tool use]
+    end
+
+    subgraph EXT["External Services"]
+        OPENAI[OpenAI API<br/><i>chat completions + responses</i>]
+        ANTHROPIC[Anthropic API<br/><i>messages</i>]
+        VERTEX[Vertex AI<br/><i>Anthropic via GCP</i>]
+        DDG[DuckDuckGo Lite<br/><i>HTML scraping</i>]
+        BRAVE[Brave Search API<br/><i>JSON API</i>]
+        DOCKER[Docker Engine<br/><i>local daemon</i>]
+        WEBPAGES[Public Webpages]
+    end
+
+    DEV -->|"runs with model, url, prompt, provider"| BUZZ
+    BUZZ -->|"streams LLM response"| DEV
+    BUZZ -->|"POST streaming SSE"| OPENAI
+    BUZZ -->|"POST streaming SSE"| ANTHROPIC
+    BUZZ -->|"POST streaming SSE"| VERTEX
+    BUZZ -->|"GET search results"| DDG
+    BUZZ -->|"GET search results"| BRAVE
+    BUZZ -->|"scrape page content"| WEBPAGES
+    BUZZ -->|"manage container lifecycle"| DOCKER
