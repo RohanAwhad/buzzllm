@@ -24,6 +24,31 @@ Optionally copy to PATH:
 cp target/release/buzzllm /usr/local/bin/
 ```
 
+## Prerequisites
+
+### Required
+
+| Dependency | Used by | Install |
+|-----------|---------|---------|
+| Rust 1.75+ | Build | [rustup.rs](https://rustup.rs) |
+| `rg` (ripgrep) | `codesearch`, `coding` tools | `brew install ripgrep` / `apt install ripgrep` |
+| `/bin/sh` | `coding` tool (`bash`) | Pre-installed on macOS/Linux |
+| API key env var | All providers (except Vertex AI) | See providers table below |
+
+### Optional
+
+| Dependency | Used by | Install |
+|-----------|---------|---------|
+| `gcloud` CLI | `vertexai-anthropic` provider | [gcloud SDK](https://cloud.google.com/sdk/docs/install) |
+| Docker | `pythonexec` tool | [docker.com](https://docker.com) |
+| `BRAVE_SEARCH_AI_API_KEY` env var | Brave fallback in `websearch` | [brave.com/search/api](https://brave.com/search/api/) |
+
+### Platform notes
+
+- **macOS**: `brew install ripgrep`
+- **Ubuntu/Debian**: `sudo apt-get install ripgrep`
+- `find` is pre-installed on macOS and Linux (used by `codesearch` for directory listings)
+
 ## Quick start
 
 ```bash
