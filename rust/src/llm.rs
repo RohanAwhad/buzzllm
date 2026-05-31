@@ -125,11 +125,7 @@ pub async fn invoke_llm(
                     if let Some(ref result) = tc.result {
                         let result_response = StreamResponse::new(
                             &tc.id,
-                            format!(
-                                "\n\nTool Result ({}):\n{}\n",
-                                tc.name,
-                                result
-                            ),
+                            format!("\n\nTool Result ({}):\n{}\n", tc.name, result),
                             StreamResponseType::ToolResult,
                         );
                         print_to_stdout(&result_response, sse, brief);

@@ -36,6 +36,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
+      - name: Install system deps
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
       - name: Run tests
         run: cargo test -- --test-threads=1
         working-directory: rust
