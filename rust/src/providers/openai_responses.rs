@@ -1,8 +1,49 @@
-use std::collections::HashMap;
+use crate::providers::{LlmClient, OpenAIResponsesClient, ToolSchemaFormat};
+use crate::types::{LlmOptions, RequestArgs, StreamResponse, StreamResponseType, ToolCallData};
 use serde_json::json;
-use crate::types::{LlmOptions, RequestArgs, StreamResponse, StreamResponseType};
+use std::collections::HashMap;
 
-pub fn make_request_args(opts: &LlmOptions, prompt: &str, system_prompt: &str) -> anyhow::Result<RequestArgs> {
+impl LlmClient for OpenAIResponsesClient {
+    fn build_request(
+        &self,
+        opts: &LlmOptions,
+        prompt: &str,
+        system_prompt: &str,
+    ) -> anyhow::Result<RequestArgs> {
+        make_request_args(opts, prompt, system_prompt)
+    }
+
+    fn parse_sse_line(
+        &self,
+        line: &str,
+        _message_started: bool,
+        _tool_calls: &mut HashMap<String, ToolCallData>,
+        _current_tool_call_id: &mut String,
+    ) -> Vec<StreamResponse> {
+        parse_sse_line(line)
+    }
+
+    fn assemble_tool_messages(
+        &self,
+        _messages: &mut Vec<serde_json::Value>,
+        _tool_calls: &HashMap<String, ToolCallData>,
+    ) {
+    }
+
+    fn default_api_url(&self, _model: &str) -> String {
+        "https://api.openai.com/v1/responses".into()
+    }
+
+    fn tool_schema_format(&self) -> ToolSchemaFormat {
+        ToolSchemaFormat::OpenAI
+    }
+}
+
+pub fn make_request_args(
+    opts: &LlmOptions,
+    prompt: &str,
+    system_prompt: &str,
+) -> anyhow::Result<RequestArgs> {
     let mut data = json!({
         "model": opts.model,
         "input": prompt,
@@ -19,7 +60,9 @@ pub fn make_request_args(opts: &LlmOptions, prompt: &str, system_prompt: &str) -
     }
 
     if opts.tools.is_some() {
-        return Err(anyhow::anyhow!("Tools with OpenAI Responses API has not yet been implemented"));
+        return Err(anyhow::anyhow!(
+            "Tools with OpenAI Responses API has not yet been implemented"
+        ));
     }
 
     let mut headers = HashMap::new();
@@ -33,7 +76,7 @@ pub fn make_request_args(opts: &LlmOptions, prompt: &str, system_prompt: &str) -
     Ok(RequestArgs { data, headers })
 }
 
-pub fn parse_sse_line(line: &str, _message_started: bool) -> Vec<StreamResponse> {
+pub fn parse_sse_line(line: &str) -> Vec<StreamResponse> {
     let mut responses = Vec::new();
 
     if !line.starts_with("data: ") {
@@ -46,7 +89,10 @@ pub fn parse_sse_line(line: &str, _message_started: bool) -> Vec<StreamResponse>
         Err(_) => return responses,
     };
 
-    let event_type = chunk_data.get("type").and_then(|v| v.as_str()).unwrap_or("");
+    let event_type = chunk_data
+        .get("type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
 
     match event_type {
         "response.created" => {
@@ -55,15 +101,33 @@ pub fn parse_sse_line(line: &str, _message_started: bool) -> Vec<StreamResponse>
                 .and_then(|r| r.get("id"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            responses.push(StreamResponse::new(response_id, "", StreamResponseType::ResponseStart));
+            responses.push(StreamResponse::new(
+                response_id,
+                "",
+                StreamResponseType::ResponseStart,
+            ));
         }
         "response.output_text.delta" => {
-            let delta_text = chunk_data.get("delta").and_then(|v| v.as_str()).unwrap_or("");
-            responses.push(StreamResponse::new("", delta_text, StreamResponseType::OutputText));
+            let delta_text = chunk_data
+                .get("delta")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            responses.push(StreamResponse::new(
+                "",
+                delta_text,
+                StreamResponseType::OutputText,
+            ));
         }
         "response.reasoning_summary_text.delta" => {
-            let delta_text = chunk_data.get("delta").and_then(|v| v.as_str()).unwrap_or("");
-            responses.push(StreamResponse::new("", delta_text, StreamResponseType::ReasoningContent));
+            let delta_text = chunk_data
+                .get("delta")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            responses.push(StreamResponse::new(
+                "",
+                delta_text,
+                StreamResponseType::ReasoningContent,
+            ));
         }
         "response.completed" => {
             responses.push(StreamResponse::new("", "", StreamResponseType::BlockEnd));

@@ -1,13 +1,13 @@
-use std::sync::Arc;
 use async_trait::async_trait;
-use serde_json::{json, Value};
-use tokio::sync::Mutex;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
-use bollard::Docker;
 use bollard::container::{Config, CreateContainerOptions, KillContainerOptions};
 use bollard::models::{HostConfig, PortBinding};
+use bollard::Docker;
+use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
+use tokio::sync::Mutex;
 
 const DOCKER_IMAGE: &str = "buzz/python-exec:latest";
 const MAX_OUTPUT_LENGTH: usize = 10000;
@@ -24,6 +24,12 @@ pub struct PythonExecute {
 
 impl PythonExecute {
     pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl Default for PythonExecute {
+    fn default() -> Self {
         Self {
             state: Arc::new(Mutex::new(PythonExecState::default())),
         }
@@ -36,7 +42,9 @@ fn find_available_port() -> anyhow::Result<u16> {
             return Ok(port);
         }
     }
-    Err(anyhow::anyhow!("No available ports found in range 3000-7990"))
+    Err(anyhow::anyhow!(
+        "No available ports found in range 3000-7990"
+    ))
 }
 
 async fn start_container(state: &mut PythonExecState, mem: &str) -> anyhow::Result<()> {
@@ -64,7 +72,11 @@ async fn start_container(state: &mut PythonExecState, mem: &str) -> anyhow::Resu
 
     // Parse memory limit
     let memory = if mem.ends_with('m') || mem.ends_with('M') {
-        mem.trim_end_matches(['m', 'M']).parse::<i64>().unwrap_or(512) * 1024 * 1024
+        mem.trim_end_matches(['m', 'M'])
+            .parse::<i64>()
+            .unwrap_or(512)
+            * 1024
+            * 1024
     } else if mem.ends_with('g') || mem.ends_with('G') {
         mem.trim_end_matches(['g', 'G']).parse::<i64>().unwrap_or(1) * 1024 * 1024 * 1024
     } else {
@@ -84,19 +96,29 @@ async fn start_container(state: &mut PythonExecState, mem: &str) -> anyhow::Resu
         ..Default::default()
     };
 
-    let container = docker.create_container(
-        Some(CreateContainerOptions::<String> { name: container_name, platform: None }),
-        config,
-    ).await.map_err(|e| anyhow::anyhow!("Failed to create container: {}", e))?;
+    let container = docker
+        .create_container(
+            Some(CreateContainerOptions::<String> {
+                name: container_name,
+                platform: None,
+            }),
+            config,
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to create container: {}", e))?;
 
-    docker.start_container::<String>(&container.id, None)
+    docker
+        .start_container::<String>(&container.id, None)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to start container: {}", e))?;
 
     // Wait for container to be ready
     let mut ready = false;
     for _ in 0..10 {
-        if TcpStream::connect(format!("127.0.0.1:{}", port)).await.is_ok() {
+        if TcpStream::connect(format!("127.0.0.1:{}", port))
+            .await
+            .is_ok()
+        {
             ready = true;
             break;
         }
@@ -104,10 +126,12 @@ async fn start_container(state: &mut PythonExecState, mem: &str) -> anyhow::Resu
     }
 
     if !ready {
-        let _ = docker.kill_container(
-            &container.id,
-            Some(KillContainerOptions { signal: "SIGKILL" }),
-        ).await;
+        let _ = docker
+            .kill_container(
+                &container.id,
+                Some(KillContainerOptions { signal: "SIGKILL" }),
+            )
+            .await;
         return Err(anyhow::anyhow!("Container failed to start or become ready"));
     }
 
@@ -132,7 +156,9 @@ fn truncate_output(s: &str) -> String {
 
 #[async_trait]
 impl super::Tool for PythonExecute {
-    fn name(&self) -> &str { "python_execute" }
+    fn name(&self) -> &str {
+        "python_execute"
+    }
 
     fn openai_schema(&self) -> Value {
         json!({
@@ -187,59 +213,65 @@ impl super::Tool for PythonExecute {
 
         let port = match state.port {
             Some(p) => p,
-            None => return json!({"stdout": "", "stderr": "Execution failed: no port", "result": null}),
+            None => {
+                return json!({"stdout": "", "stderr": "Execution failed: no port", "result": null})
+            }
         };
 
         // Drop the lock before doing I/O
         drop(state);
 
         // Connect and send code
-        let result = tokio::time::timeout(
-            std::time::Duration::from_secs(timeout_secs),
-            async {
-                let mut stream = TcpStream::connect(format!("127.0.0.1:{}", port)).await?;
-                let request = serde_json::to_string(&json!({"code": code}))?;
-                stream.write_all(request.as_bytes()).await?;
+        let result = tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), async {
+            let mut stream = TcpStream::connect(format!("127.0.0.1:{}", port)).await?;
+            let request = serde_json::to_string(&json!({"code": code}))?;
+            stream.write_all(request.as_bytes()).await?;
 
-                let mut response_data = Vec::new();
-                let mut buf = [0u8; 4096];
+            let mut response_data = Vec::new();
+            let mut buf = [0u8; 4096];
 
-                loop {
-                    let n = stream.read(&mut buf).await?;
-                    if n == 0 { break; }
-                    response_data.extend_from_slice(&buf[..n]);
-
-                    // Try parsing as JSON
-                    if serde_json::from_slice::<Value>(&response_data).is_ok() {
-                        break;
-                    }
+            loop {
+                let n = stream.read(&mut buf).await?;
+                if n == 0 {
+                    break;
                 }
+                response_data.extend_from_slice(&buf[..n]);
 
-                if response_data.is_empty() {
-                    return Ok::<Value, anyhow::Error>(json!({"stdout": "", "stderr": "No response from container", "result": null}));
+                // Try parsing as JSON
+                if serde_json::from_slice::<Value>(&response_data).is_ok() {
+                    break;
                 }
+            }
 
-                let mut response: Value = serde_json::from_slice(&response_data)?;
+            if response_data.is_empty() {
+                return Ok::<Value, anyhow::Error>(
+                    json!({"stdout": "", "stderr": "No response from container", "result": null}),
+                );
+            }
 
-                // Truncate large outputs
-                if let Some(stdout) = response.get("stdout").and_then(|v| v.as_str()) {
-                    if stdout.len() > MAX_OUTPUT_LENGTH {
-                        response["stdout"] = json!(truncate_output(stdout));
-                    }
+            let mut response: Value = serde_json::from_slice(&response_data)?;
+
+            // Truncate large outputs
+            if let Some(stdout) = response.get("stdout").and_then(|v| v.as_str()) {
+                if stdout.len() > MAX_OUTPUT_LENGTH {
+                    response["stdout"] = json!(truncate_output(stdout));
                 }
-                if let Some(stderr) = response.get("stderr").and_then(|v| v.as_str()) {
-                    if stderr.len() > MAX_OUTPUT_LENGTH {
-                        response["stderr"] = json!(truncate_output(stderr));
-                    }
+            }
+            if let Some(stderr) = response.get("stderr").and_then(|v| v.as_str()) {
+                if stderr.len() > MAX_OUTPUT_LENGTH {
+                    response["stderr"] = json!(truncate_output(stderr));
                 }
+            }
 
-                Ok(response)
-            },
-        ).await;
+            Ok(response)
+        })
+        .await;
 
         match result {
             Ok(Ok(v)) => v,
-            Ok(Err(e)) => json!({"stdout": "", "stderr": format!("Execution failed: {}", e), "result": null}),
+            Ok(Err(e)) => {
+                json!({"stdout": "", "stderr": format!("Execution failed: {}", e), "result": null})
+            }
             Err(_) => json!({"stdout": "", "stderr": "Execution timed out", "result": null}),
         }
     }
@@ -248,10 +280,12 @@ impl super::Tool for PythonExecute {
         let mut state = self.state.lock().await;
         if let Some(ref container_id) = state.container_id {
             if let Ok(docker) = Docker::connect_with_local_defaults() {
-                let _ = docker.kill_container(
-                    container_id,
-                    Some(KillContainerOptions { signal: "SIGKILL" }),
-                ).await;
+                let _ = docker
+                    .kill_container(
+                        container_id,
+                        Some(KillContainerOptions { signal: "SIGKILL" }),
+                    )
+                    .await;
                 tracing::info!("Python execution container stopped");
             }
         }

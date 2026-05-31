@@ -3,7 +3,8 @@ use predicates::prelude::*;
 
 #[test]
 fn test_help_exits_zero() {
-    Command::cargo_bin("buzzllm").unwrap()
+    Command::cargo_bin("buzzllm")
+        .unwrap()
         .arg("--help")
         .assert()
         .success();
@@ -11,7 +12,8 @@ fn test_help_exits_zero() {
 
 #[test]
 fn test_help_shows_providers() {
-    Command::cargo_bin("buzzllm").unwrap()
+    Command::cargo_bin("buzzllm")
+        .unwrap()
         .arg("--help")
         .assert()
         .success()
@@ -22,7 +24,8 @@ fn test_help_shows_providers() {
 
 #[test]
 fn test_help_shows_prompts() {
-    Command::cargo_bin("buzzllm").unwrap()
+    Command::cargo_bin("buzzllm")
+        .unwrap()
         .arg("--help")
         .assert()
         .success()
@@ -33,7 +36,8 @@ fn test_help_shows_prompts() {
 
 #[test]
 fn test_missing_provider_fails() {
-    Command::cargo_bin("buzzllm").unwrap()
+    Command::cargo_bin("buzzllm")
+        .unwrap()
         .arg("gpt-4.1-mini")
         .arg("hello")
         .arg("--api-key-name")
@@ -44,7 +48,8 @@ fn test_missing_provider_fails() {
 
 #[test]
 fn test_invalid_provider_fails() {
-    Command::cargo_bin("buzzllm").unwrap()
+    Command::cargo_bin("buzzllm")
+        .unwrap()
         .arg("gpt-4.1-mini")
         .arg("hello")
         .arg("--provider")
@@ -57,7 +62,8 @@ fn test_invalid_provider_fails() {
 
 #[test]
 fn test_system_prompt_coding_accepted() {
-    Command::cargo_bin("buzzllm").unwrap()
+    Command::cargo_bin("buzzllm")
+        .unwrap()
         .arg("--help")
         .assert()
         .success()
@@ -71,7 +77,8 @@ fn test_openai_simple_call() {
         eprintln!("skipping: OPENAI_API_KEY not set");
         return;
     }
-    Command::cargo_bin("buzzllm").unwrap()
+    Command::cargo_bin("buzzllm")
+        .unwrap()
         .arg("gpt-4.1-mini")
         .arg("Say hello")
         .arg("--provider")
@@ -91,7 +98,8 @@ fn test_sse_output_format() {
         eprintln!("skipping: OPENAI_API_KEY not set");
         return;
     }
-    Command::cargo_bin("buzzllm").unwrap()
+    Command::cargo_bin("buzzllm")
+        .unwrap()
         .arg("gpt-4.1-mini")
         .arg("Hi")
         .arg("--provider")

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
-use serde_json::{json, Value};
 use regex::Regex;
 use scraper::{Html, Selector};
+use serde_json::{json, Value};
 
 #[derive(Debug)]
 struct DuckDuckGoBotDetected;
@@ -14,7 +14,10 @@ impl std::fmt::Display for DuckDuckGoBotDetected {
 
 impl std::error::Error for DuckDuckGoBotDetected {}
 
-async fn search_duckduckgo(query: &str, count: usize) -> Result<Vec<Value>, Box<dyn std::error::Error + Send + Sync>> {
+async fn search_duckduckgo(
+    query: &str,
+    count: usize,
+) -> Result<Vec<Value>, Box<dyn std::error::Error + Send + Sync>> {
     if query.is_empty() {
         return Ok(Vec::new());
     }
@@ -23,8 +26,14 @@ async fn search_duckduckgo(query: &str, count: usize) -> Result<Vec<Value>, Box<
     let response = client
         .get("https://lite.duckduckgo.com/lite/")
         .query(&[("q", query)])
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0")
-        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
+        )
+        .header(
+            "Accept",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        )
         .header("Accept-Language", "en-US,en;q=0.5")
         .header("Accept-Encoding", "gzip, deflate")
         .header("Connection", "keep-alive")
@@ -63,6 +72,7 @@ async fn search_duckduckgo(query: &str, count: usize) -> Result<Vec<Value>, Box<
 
     let rows: Vec<_> = results_table.select(&tr_sel).collect();
     let num_pattern = Regex::new(r"^\d+\.\s*$").unwrap();
+    let ws_re = Regex::new(r"\s+").unwrap();
 
     let mut results = Vec::new();
     let mut i = 0;
@@ -82,15 +92,17 @@ async fn search_duckduckgo(query: &str, count: usize) -> Result<Vec<Value>, Box<
                     if i + 1 < rows.len() {
                         let desc_cells: Vec<_> = rows[i + 1].select(&td_sel).collect();
                         if desc_cells.len() >= 2 {
-                            let desc_text = desc_cells[1].text().collect::<String>().trim().to_string();
-                            if !desc_text.starts_with("http://") && !desc_text.starts_with("https://") {
+                            let desc_text =
+                                desc_cells[1].text().collect::<String>().trim().to_string();
+                            if !desc_text.starts_with("http://")
+                                && !desc_text.starts_with("https://")
+                            {
                                 description = desc_text;
                             }
                         }
                     }
 
                     // Collapse whitespace
-                    let ws_re = Regex::new(r"\s+").unwrap();
                     description = ws_re.replace_all(&description, " ").trim().to_string();
 
                     if !title.is_empty() && !url.is_empty() {
@@ -112,16 +124,20 @@ async fn search_duckduckgo(query: &str, count: usize) -> Result<Vec<Value>, Box<
     Ok(results)
 }
 
-async fn search_brave(query: &str, count: usize) -> Result<Vec<Value>, Box<dyn std::error::Error + Send + Sync>> {
+async fn search_brave(
+    query: &str,
+    count: usize,
+) -> Result<Vec<Value>, Box<dyn std::error::Error + Send + Sync>> {
     if query.is_empty() {
         return Ok(Vec::new());
     }
 
-    let api_key = std::env::var("BRAVE_SEARCH_AI_API_KEY")
-        .map_err(|_| -> Box<dyn std::error::Error + Send + Sync> {
+    let api_key = std::env::var("BRAVE_SEARCH_AI_API_KEY").map_err(
+        |_| -> Box<dyn std::error::Error + Send + Sync> {
             tracing::error!("Missing Brave Search API key");
             "Missing Brave Search API key".into()
-        })?;
+        },
+    )?;
 
     if api_key.is_empty() {
         tracing::error!("Missing Brave Search API key");
@@ -141,7 +157,11 @@ async fn search_brave(query: &str, count: usize) -> Result<Vec<Value>, Box<dyn s
     let results_json: Value = response.json().await?;
 
     let mut results = Vec::new();
-    if let Some(items) = results_json.get("web").and_then(|w| w.get("results")).and_then(|r| r.as_array()) {
+    if let Some(items) = results_json
+        .get("web")
+        .and_then(|w| w.get("results"))
+        .and_then(|r| r.as_array())
+    {
         for item in items {
             results.push(json!({
                 "title": item.get("title").and_then(|v| v.as_str()).unwrap_or(""),
@@ -161,7 +181,9 @@ async fn search_web_internal(query: &str) -> Vec<Value> {
             Ok(results) => return results,
             Err(e) => {
                 if e.downcast_ref::<DuckDuckGoBotDetected>().is_some() {
-                    tracing::warn!("DuckDuckGo bot detection triggered, falling back to Brave Search");
+                    tracing::warn!(
+                        "DuckDuckGo bot detection triggered, falling back to Brave Search"
+                    );
                     break;
                 }
                 if attempt < 2 {
@@ -241,7 +263,10 @@ fn extract_text_recursive(element: &scraper::ElementRef, output: &mut String, de
     let tag = element.value().name();
 
     // Skip nav, header, footer, script, style
-    if matches!(tag, "nav" | "header" | "footer" | "script" | "style" | "noscript") {
+    if matches!(
+        tag,
+        "nav" | "header" | "footer" | "script" | "style" | "noscript"
+    ) {
         return;
     }
 
@@ -324,7 +349,9 @@ pub struct SearchWeb;
 
 #[async_trait]
 impl super::Tool for SearchWeb {
-    fn name(&self) -> &str { "search_web" }
+    fn name(&self) -> &str {
+        "search_web"
+    }
 
     fn openai_schema(&self) -> Value {
         json!({
@@ -370,7 +397,9 @@ pub struct ScrapeWebpage;
 
 #[async_trait]
 impl super::Tool for ScrapeWebpage {
-    fn name(&self) -> &str { "scrape_webpage" }
+    fn name(&self) -> &str {
+        "scrape_webpage"
+    }
 
     fn openai_schema(&self) -> Value {
         json!({
@@ -415,7 +444,8 @@ impl super::Tool for ScrapeWebpage {
             if !result.starts_with("Error scraping") || attempt >= 4 {
                 return json!(result);
             }
-            let delay = std::time::Duration::from_secs((4u64).min(2u64.pow(attempt + 1)).max(4).min(10));
+            let delay =
+                std::time::Duration::from_secs((4u64).min(2u64.pow(attempt + 1)).clamp(4, 10));
             tokio::time::sleep(delay).await;
         }
 

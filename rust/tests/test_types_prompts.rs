@@ -60,9 +60,15 @@ fn test_stream_response_escapes_quotes() {
 
 #[test]
 fn test_stream_response_types_display() {
-    assert_eq!(StreamResponseType::ResponseStart.to_string(), "response_start");
+    assert_eq!(
+        StreamResponseType::ResponseStart.to_string(),
+        "response_start"
+    );
     assert_eq!(StreamResponseType::OutputText.to_string(), "output_text");
-    assert_eq!(StreamResponseType::ReasoningContent.to_string(), "reasoning_content");
+    assert_eq!(
+        StreamResponseType::ReasoningContent.to_string(),
+        "reasoning_content"
+    );
     assert_eq!(StreamResponseType::ToolCall.to_string(), "tool_call");
     assert_eq!(StreamResponseType::ToolResult.to_string(), "tool_result");
     assert_eq!(StreamResponseType::BlockEnd.to_string(), "block_end");

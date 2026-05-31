@@ -1,10 +1,10 @@
+use buzzllm::tools::bash::Bash;
+use buzzllm::tools::codesearch::{BashFind, BashRead, BashRipgrep};
+use buzzllm::tools::write_file::WriteFile;
+use buzzllm::tools::{Tool, ToolRegistry};
+use serde_json::json;
 use std::fs;
 use tempfile::TempDir;
-use serde_json::json;
-use buzzllm::tools::{Tool, ToolRegistry};
-use buzzllm::tools::write_file::WriteFile;
-use buzzllm::tools::bash::Bash;
-use buzzllm::tools::codesearch::{BashRead, BashFind, BashRipgrep};
 
 // ============================================================
 // ToolRegistry
@@ -37,7 +37,10 @@ fn test_openai_schema_structure() {
     let tool: &dyn Tool = &WriteFile;
     let schema = tool.openai_schema();
     assert_eq!(schema["type"], "function");
-    assert!(schema["function"]["name"].as_str().unwrap().contains("write_file"));
+    assert!(schema["function"]["name"]
+        .as_str()
+        .unwrap()
+        .contains("write_file"));
 }
 
 #[test]
@@ -64,11 +67,13 @@ async fn test_write_file_new_file() {
     let _guard = std::env::set_current_dir(dir.path());
 
     let tool = WriteFile;
-    let result = tool.execute(json!({
-        "filepath": "new.txt",
-        "old_string": "",
-        "new_string": "hello world"
-    })).await;
+    let result = tool
+        .execute(json!({
+            "filepath": "new.txt",
+            "old_string": "",
+            "new_string": "hello world"
+        }))
+        .await;
 
     assert_eq!(result["success"], true);
     assert_eq!(result["created"], true);
@@ -84,11 +89,13 @@ async fn test_write_file_edit_existing() {
     let _guard = std::env::set_current_dir(dir.path());
 
     let tool = WriteFile;
-    let result = tool.execute(json!({
-        "filepath": "edit.txt",
-        "old_string": "hello",
-        "new_string": "goodbye"
-    })).await;
+    let result = tool
+        .execute(json!({
+            "filepath": "edit.txt",
+            "old_string": "hello",
+            "new_string": "goodbye"
+        }))
+        .await;
 
     assert_eq!(result["success"], true);
     assert_eq!(fs::read_to_string(&filepath).unwrap(), "goodbye world");
@@ -102,11 +109,13 @@ async fn test_write_file_not_found() {
     let _guard = std::env::set_current_dir(dir.path());
 
     let tool = WriteFile;
-    let result = tool.execute(json!({
-        "filepath": "edit.txt",
-        "old_string": "nonexistent",
-        "new_string": "x"
-    })).await;
+    let result = tool
+        .execute(json!({
+            "filepath": "edit.txt",
+            "old_string": "nonexistent",
+            "new_string": "x"
+        }))
+        .await;
 
     assert!(result["error"].as_str().unwrap().contains("not found"));
 }
@@ -119,11 +128,13 @@ async fn test_write_file_multiple_matches() {
     let _guard = std::env::set_current_dir(dir.path());
 
     let tool = WriteFile;
-    let result = tool.execute(json!({
-        "filepath": "edit.txt",
-        "old_string": "hello",
-        "new_string": "x"
-    })).await;
+    let result = tool
+        .execute(json!({
+            "filepath": "edit.txt",
+            "old_string": "hello",
+            "new_string": "x"
+        }))
+        .await;
 
     assert!(result["error"].as_str().unwrap().contains("2 times"));
 }
@@ -141,11 +152,13 @@ async fn test_write_file_parent_not_exists() {
     let _guard = std::env::set_current_dir(dir.path());
 
     let tool = WriteFile;
-    let result = tool.execute(json!({
-        "filepath": "subdir/new.txt",
-        "old_string": "",
-        "new_string": "hello"
-    })).await;
+    let result = tool
+        .execute(json!({
+            "filepath": "subdir/new.txt",
+            "old_string": "",
+            "new_string": "hello"
+        }))
+        .await;
 
     assert!(result["error"].as_str().unwrap().contains("parent"));
 }
@@ -156,11 +169,13 @@ async fn test_write_file_missing_file_with_old_string() {
     let _guard = std::env::set_current_dir(dir.path());
 
     let tool = WriteFile;
-    let result = tool.execute(json!({
-        "filepath": "nonexistent.txt",
-        "old_string": "hello",
-        "new_string": "x"
-    })).await;
+    let result = tool
+        .execute(json!({
+            "filepath": "nonexistent.txt",
+            "old_string": "hello",
+            "new_string": "x"
+        }))
+        .await;
 
     assert!(result["error"].as_str().unwrap().contains("File not found"));
 }
@@ -250,7 +265,9 @@ async fn test_bash_read_pagination() {
     fs::write(&filepath, "a\nb\nc\nd\ne").unwrap();
     let _guard = std::env::set_current_dir(dir.path());
 
-    let result = BashRead.execute(json!({"filepath": "readme.txt", "limit": 2, "offset": 1})).await;
+    let result = BashRead
+        .execute(json!({"filepath": "readme.txt", "limit": 2, "offset": 1}))
+        .await;
     assert_eq!(result["returned"], 2);
     assert_eq!(result["total"], 5);
     assert_eq!(result["results"][0], "b");
@@ -263,7 +280,9 @@ async fn test_bash_read_not_found() {
     let dir = TempDir::new().unwrap();
     let _guard = std::env::set_current_dir(dir.path());
 
-    let result = BashRead.execute(json!({"filepath": "nonexistent.txt"})).await;
+    let result = BashRead
+        .execute(json!({"filepath": "nonexistent.txt"}))
+        .await;
     assert!(result["error"].as_str().unwrap().contains("invalid path"));
 }
 
@@ -292,7 +311,9 @@ async fn test_bash_find_glob_filter() {
     fs::write(dir.path().join("b.py"), "").unwrap();
     let _guard = std::env::set_current_dir(dir.path());
 
-    let result = BashFind.execute(json!({"path": ".", "name": "*.rs", "limit": 10})).await;
+    let result = BashFind
+        .execute(json!({"path": ".", "name": "*.rs", "limit": 10}))
+        .await;
     let results = result["results"].as_array().unwrap();
     for r in results {
         assert!(r.as_str().unwrap().ends_with(".rs"));
@@ -309,7 +330,9 @@ async fn test_bash_ripgrep_finds_pattern() {
     fs::write(dir.path().join("test.txt"), "hello world\nfoo bar").unwrap();
     let _guard = std::env::set_current_dir(dir.path());
 
-    let result = BashRipgrep.execute(json!({"pattern": "hello", "files": "."})).await;
+    let result = BashRipgrep
+        .execute(json!({"pattern": "hello", "files": "."}))
+        .await;
     let results = result["results"].as_array().unwrap();
     assert!(!results.is_empty());
 }
@@ -320,6 +343,8 @@ async fn test_bash_ripgrep_no_match() {
     fs::write(dir.path().join("test.txt"), "hello world").unwrap();
     let _guard = std::env::set_current_dir(dir.path());
 
-    let result = BashRipgrep.execute(json!({"pattern": "ZXYZZYNOTFOUND", "files": "."})).await;
+    let result = BashRipgrep
+        .execute(json!({"pattern": "ZXYZZYNOTFOUND", "files": "."}))
+        .await;
     assert!(result.get("error").is_some());
 }

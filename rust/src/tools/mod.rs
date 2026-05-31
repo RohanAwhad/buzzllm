@@ -1,10 +1,12 @@
+pub mod bash;
 pub mod codesearch;
-pub mod websearch;
 pub mod pythonexec;
+pub mod websearch;
+pub mod write_file;
 
-use std::collections::HashMap;
 use async_trait::async_trait;
 use serde_json::Value;
+use std::collections::HashMap;
 
 #[async_trait]
 pub trait Tool: Send + Sync {
@@ -24,15 +26,14 @@ pub trait Tool: Send + Sync {
     async fn cleanup(&self) {}
 }
 
+#[derive(Default)]
 pub struct ToolRegistry {
     tools: HashMap<String, Box<dyn Tool>>,
 }
 
 impl ToolRegistry {
     pub fn new() -> Self {
-        Self {
-            tools: HashMap::new(),
-        }
+        Self::default()
     }
 
     pub fn register(&mut self, tool: Box<dyn Tool>) {

@@ -1,8 +1,50 @@
-use std::collections::HashMap;
+use crate::providers::{LlmClient, ToolSchemaFormat, VertexAIAnthropicClient};
+use crate::types::{LlmOptions, RequestArgs, StreamResponse, ToolCallData};
 use serde_json::json;
-use crate::types::{LlmOptions, RequestArgs};
+use std::collections::HashMap;
 
-pub fn make_request_args(opts: &LlmOptions, prompt: &str, system_prompt: &str) -> anyhow::Result<RequestArgs> {
+impl LlmClient for VertexAIAnthropicClient {
+    fn build_request(
+        &self,
+        opts: &LlmOptions,
+        prompt: &str,
+        system_prompt: &str,
+    ) -> anyhow::Result<RequestArgs> {
+        make_request_args(opts, prompt, system_prompt)
+    }
+
+    fn parse_sse_line(
+        &self,
+        line: &str,
+        message_started: bool,
+        tool_calls: &mut HashMap<String, ToolCallData>,
+        current_tool_call_id: &mut String,
+    ) -> Vec<StreamResponse> {
+        super::anthropic::parse_sse_line(line, message_started, tool_calls, current_tool_call_id)
+    }
+
+    fn assemble_tool_messages(
+        &self,
+        messages: &mut Vec<serde_json::Value>,
+        tool_calls: &HashMap<String, ToolCallData>,
+    ) {
+        super::anthropic::assemble_tool_messages(messages, tool_calls);
+    }
+
+    fn default_api_url(&self, _model: &str) -> String {
+        String::new()
+    }
+
+    fn tool_schema_format(&self) -> ToolSchemaFormat {
+        ToolSchemaFormat::Anthropic
+    }
+}
+
+pub fn make_request_args(
+    opts: &LlmOptions,
+    prompt: &str,
+    system_prompt: &str,
+) -> anyhow::Result<RequestArgs> {
     let mut data = json!({
         "anthropic_version": "vertex-2023-10-16",
         "system": system_prompt,
@@ -24,7 +66,6 @@ pub fn make_request_args(opts: &LlmOptions, prompt: &str, system_prompt: &str) -
     let mut headers = HashMap::new();
     headers.insert("Content-Type".to_string(), "application/json".to_string());
 
-    // Get access token from gcloud CLI
     let output = std::process::Command::new("gcloud")
         .args(["auth", "print-access-token"])
         .output()

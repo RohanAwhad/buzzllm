@@ -70,7 +70,11 @@ pub struct StreamResponse {
 }
 
 impl StreamResponse {
-    pub fn new(id: impl Into<String>, delta: impl Into<String>, response_type: StreamResponseType) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        delta: impl Into<String>,
+        response_type: StreamResponseType,
+    ) -> Self {
         Self {
             id: id.into(),
             delta: delta.into(),

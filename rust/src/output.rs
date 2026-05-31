@@ -1,9 +1,14 @@
-use std::io::{self, Write};
 use crate::types::{StreamResponse, StreamResponseType};
+use std::io::{self, Write};
 
 pub fn print_to_stdout(data: &StreamResponse, sse: bool, brief: bool) {
     // Brief mode: skip tool calls and results
-    if brief && matches!(data.response_type, StreamResponseType::ToolCall | StreamResponseType::ToolResult) {
+    if brief
+        && matches!(
+            data.response_type,
+            StreamResponseType::ToolCall | StreamResponseType::ToolResult
+        )
+    {
         return;
     }
 
@@ -29,7 +34,7 @@ pub fn print_to_stdout(data: &StreamResponse, sse: bool, brief: bool) {
             let _ = write!(out, "\x1b[93m{}\x1b[0m", data.delta);
         }
         StreamResponseType::BlockEnd => {
-            let _ = write!(out, "\n");
+            let _ = writeln!(out);
         }
         StreamResponseType::ResponseEnd => {
             let _ = writeln!(out, "\n\n=== [ DONE ] ===");

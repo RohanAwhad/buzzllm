@@ -1,13 +1,18 @@
-use std::path::{Path, PathBuf};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use std::path::{Path, PathBuf};
 use tokio::process::Command;
 
-fn validate_path(path_str: &str, cwd: &Path) -> anyhow::Result<PathBuf> {
-    let resolved = cwd.join(path_str).canonicalize()
+pub(crate) fn validate_path(path_str: &str, cwd: &Path) -> anyhow::Result<PathBuf> {
+    let resolved = cwd
+        .join(path_str)
+        .canonicalize()
         .map_err(|e| anyhow::anyhow!("invalid path '{}': {}", path_str, e))?;
     if !resolved.starts_with(cwd) {
-        return Err(anyhow::anyhow!("Path outside CWD not allowed: {}", resolved.display()));
+        return Err(anyhow::anyhow!(
+            "Path outside CWD not allowed: {}",
+            resolved.display()
+        ));
     }
     Ok(resolved)
 }
@@ -21,7 +26,11 @@ fn paginate_results(results: &[String], limit: i64, offset: i64) -> Value {
         (p, false)
     } else {
         let end = offset + limit;
-        let p: Vec<&String> = results.iter().skip(offset as usize).take(limit as usize).collect();
+        let p: Vec<&String> = results
+            .iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .collect();
         (p, end < total)
     };
 
@@ -37,8 +46,10 @@ fn paginate_results(results: &[String], limit: i64, offset: i64) -> Value {
 }
 
 fn get_cwd() -> PathBuf {
-    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-        .canonicalize().unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+    std::env::current_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .canonicalize()
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
 }
 
 const BASH_FIND_DESC: &str = r#"This function uses `rg --files` to list files efficiently:
@@ -70,7 +81,9 @@ pub struct BashFind;
 
 #[async_trait]
 impl super::Tool for BashFind {
-    fn name(&self) -> &str { "bash_find" }
+    fn name(&self) -> &str {
+        "bash_find"
+    }
 
     fn openai_schema(&self) -> Value {
         json!({
@@ -116,8 +129,14 @@ impl super::Tool for BashFind {
     async fn execute(&self, args: Value) -> Value {
         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or(".");
         let name = args.get("name").and_then(|v| v.as_str()).unwrap_or("");
-        let type_filter = args.get("type_filter").and_then(|v| v.as_str()).unwrap_or("");
-        let extra_args = args.get("extra_args").and_then(|v| v.as_str()).unwrap_or("");
+        let type_filter = args
+            .get("type_filter")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let extra_args = args
+            .get("extra_args")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let limit = args.get("limit").and_then(|v| v.as_i64()).unwrap_or(20);
         let offset = args.get("offset").and_then(|v| v.as_i64()).unwrap_or(0);
 
@@ -162,7 +181,9 @@ impl super::Tool for BashFind {
                 .args(&cmd_parts[1..])
                 .current_dir(&cwd)
                 .output(),
-        ).await {
+        )
+        .await
+        {
             Ok(Ok(output)) => {
                 if !output.status.success() {
                     return json!({"error": format!("Command failed: {}", String::from_utf8_lossy(&output.stderr))});
@@ -189,7 +210,9 @@ pub struct BashRipgrep;
 
 #[async_trait]
 impl super::Tool for BashRipgrep {
-    fn name(&self) -> &str { "bash_ripgrep" }
+    fn name(&self) -> &str {
+        "bash_ripgrep"
+    }
 
     fn openai_schema(&self) -> Value {
         json!({
@@ -236,7 +259,10 @@ impl super::Tool for BashRipgrep {
             None => return json!({"error": "pattern is required"}),
         };
         let files = args.get("files").and_then(|v| v.as_str()).unwrap_or(".");
-        let extra_args = args.get("extra_args").and_then(|v| v.as_str()).unwrap_or("");
+        let extra_args = args
+            .get("extra_args")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let limit = args.get("limit").and_then(|v| v.as_i64()).unwrap_or(20);
         let offset = args.get("offset").and_then(|v| v.as_i64()).unwrap_or(0);
 
@@ -259,10 +285,9 @@ impl super::Tool for BashRipgrep {
         }
         cmd.current_dir(&cwd);
 
-        let result = match tokio::time::timeout(
-            std::time::Duration::from_secs(30),
-            cmd.output(),
-        ).await {
+        let result = match tokio::time::timeout(std::time::Duration::from_secs(30), cmd.output())
+            .await
+        {
             Ok(Ok(output)) => {
                 if !output.status.success() {
                     return json!({"error": format!("No matches found or command failed: {}", String::from_utf8_lossy(&output.stderr))});
@@ -289,7 +314,9 @@ pub struct BashRead;
 
 #[async_trait]
 impl super::Tool for BashRead {
-    fn name(&self) -> &str { "bash_read" }
+    fn name(&self) -> &str {
+        "bash_read"
+    }
 
     fn openai_schema(&self) -> Value {
         json!({
@@ -351,7 +378,8 @@ impl super::Tool for BashRead {
 
         // Add content field
         if let Some(results) = paginated.get("results").and_then(|v| v.as_array()) {
-            let content_str: String = results.iter()
+            let content_str: String = results
+                .iter()
                 .filter_map(|v| v.as_str())
                 .collect::<Vec<_>>()
                 .join("\n");

@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use buzzllm::providers::{self, ToolSchemaFormat};
 use buzzllm::types::{LlmOptions, StreamResponseType, ToolCallData};
+use std::collections::HashMap;
 
 fn test_opts() -> LlmOptions {
     LlmOptions {
@@ -17,7 +17,9 @@ fn test_opts() -> LlmOptions {
 
 fn test_opts_with_tools() -> LlmOptions {
     let mut opts = test_opts();
-    opts.tools = Some(vec![serde_json::json!({"type": "function", "function": {"name": "test_tool", "parameters": {}}})]);
+    opts.tools = Some(vec![
+        serde_json::json!({"type": "function", "function": {"name": "test_tool", "parameters": {}}}),
+    ]);
     opts
 }
 
@@ -80,10 +82,17 @@ fn test_openai_chat_basic_structure() {
 
 #[test]
 fn test_openai_chat_bearer_auth() {
-    unsafe { std::env::set_var("TEST_API_KEY", "sk-test123"); }
+    unsafe {
+        std::env::set_var("TEST_API_KEY", "sk-test123");
+    }
     let c = providers::create_client("openai-chat").unwrap();
-    let args = c.build_request(&test_opts_with_api_key(), "hi", "sys").unwrap();
-    assert_eq!(args.headers.get("Authorization").unwrap(), "Bearer sk-test123");
+    let args = c
+        .build_request(&test_opts_with_api_key(), "hi", "sys")
+        .unwrap();
+    assert_eq!(
+        args.headers.get("Authorization").unwrap(),
+        "Bearer sk-test123"
+    );
 }
 
 #[test]
@@ -96,7 +105,9 @@ fn test_openai_chat_no_auth_without_key() {
 #[test]
 fn test_openai_chat_tools_included() {
     let c = providers::create_client("openai-chat").unwrap();
-    let args = c.build_request(&test_opts_with_tools(), "hi", "sys").unwrap();
+    let args = c
+        .build_request(&test_opts_with_tools(), "hi", "sys")
+        .unwrap();
     let tools = args.data["tools"].as_array().unwrap();
     assert_eq!(tools.len(), 1);
 }
@@ -253,7 +264,8 @@ fn test_openai_chat_invalid_json() {
 #[test]
 fn test_openai_chat_assemble_empty_noop() {
     let c = providers::create_client("openai-chat").unwrap();
-    let mut messages: Vec<serde_json::Value> = vec![serde_json::json!({"role": "user", "content": "hi"})];
+    let mut messages: Vec<serde_json::Value> =
+        vec![serde_json::json!({"role": "user", "content": "hi"})];
     let tc = HashMap::new();
     c.assemble_tool_messages(&mut messages, &tc);
     assert_eq!(messages.len(), 1);
@@ -262,7 +274,8 @@ fn test_openai_chat_assemble_empty_noop() {
 #[test]
 fn test_openai_chat_assemble_single_tool() {
     let c = providers::create_client("openai-chat").unwrap();
-    let mut messages: Vec<serde_json::Value> = vec![serde_json::json!({"role": "user", "content": "hi"})];
+    let mut messages: Vec<serde_json::Value> =
+        vec![serde_json::json!({"role": "user", "content": "hi"})];
     let mut tc = HashMap::new();
     let mut tcd = ToolCallData::new("call_1", "search_web");
     tcd.arguments = r#"{"query":"test"}"#.into();
@@ -286,14 +299,18 @@ fn test_openai_chat_assemble_single_tool() {
 // ============================================================
 
 fn anthropic_env_setup() {
-    unsafe { std::env::set_var("TEST_API_KEY", "sk-ant-test123"); }
+    unsafe {
+        std::env::set_var("TEST_API_KEY", "sk-ant-test123");
+    }
 }
 
 #[test]
 fn test_anthropic_basic_structure() {
     anthropic_env_setup();
     let c = providers::create_client("anthropic").unwrap();
-    let args = c.build_request(&test_opts_with_api_key(), "hello", "sys prompt").unwrap();
+    let args = c
+        .build_request(&test_opts_with_api_key(), "hello", "sys prompt")
+        .unwrap();
 
     assert_eq!(args.data["system"], "sys prompt");
     assert_eq!(args.data["messages"][0]["role"], "user");
@@ -307,7 +324,9 @@ fn test_anthropic_basic_structure() {
 fn test_anthropic_xapi_key_header() {
     anthropic_env_setup();
     let c = providers::create_client("anthropic").unwrap();
-    let args = c.build_request(&test_opts_with_api_key(), "hi", "sys").unwrap();
+    let args = c
+        .build_request(&test_opts_with_api_key(), "hi", "sys")
+        .unwrap();
     assert_eq!(args.headers.get("x-api-key").unwrap(), "sk-ant-test123");
     assert!(args.headers.contains_key("anthropic-version"));
 }
@@ -328,7 +347,9 @@ fn test_anthropic_think_mode() {
 fn test_anthropic_tools_included() {
     anthropic_env_setup();
     let c = providers::create_client("anthropic").unwrap();
-    let args = c.build_request(&test_opts_with_tools(), "hi", "sys").unwrap();
+    let args = c
+        .build_request(&test_opts_with_tools(), "hi", "sys")
+        .unwrap();
     let tools = args.data["tools"].as_array().unwrap();
     assert_eq!(tools.len(), 1);
 }
@@ -434,7 +455,8 @@ fn test_anthropic_invalid_json() {
 #[test]
 fn test_anthropic_assemble_empty_noop() {
     let c = providers::create_client("anthropic").unwrap();
-    let mut messages: Vec<serde_json::Value> = vec![serde_json::json!({"role": "user", "content": "hi"})];
+    let mut messages: Vec<serde_json::Value> =
+        vec![serde_json::json!({"role": "user", "content": "hi"})];
     let tc = HashMap::new();
     c.assemble_tool_messages(&mut messages, &tc);
     assert_eq!(messages.len(), 1);
@@ -443,7 +465,8 @@ fn test_anthropic_assemble_empty_noop() {
 #[test]
 fn test_anthropic_assemble_single_tool() {
     let c = providers::create_client("anthropic").unwrap();
-    let mut messages: Vec<serde_json::Value> = vec![serde_json::json!({"role": "user", "content": "hi"})];
+    let mut messages: Vec<serde_json::Value> =
+        vec![serde_json::json!({"role": "user", "content": "hi"})];
     let mut tc = HashMap::new();
     let mut tcd = ToolCallData::new("toolu_1", "search_web");
     tcd.arguments = r#"{"query":"rust"}"#.into();
@@ -472,7 +495,9 @@ fn test_anthropic_assemble_single_tool() {
 #[test]
 fn test_openai_responses_basic_structure() {
     let c = providers::create_client("openai-responses").unwrap();
-    let args = c.build_request(&test_opts(), "hello", "sys prompt").unwrap();
+    let args = c
+        .build_request(&test_opts(), "hello", "sys prompt")
+        .unwrap();
 
     assert_eq!(args.data["model"], "gpt-4.1-mini");
     assert_eq!(args.data["input"], "hello");

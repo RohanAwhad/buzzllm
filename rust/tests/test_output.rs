@@ -1,5 +1,5 @@
-use buzzllm::types::{StreamResponse, StreamResponseType};
 use buzzllm::output::print_to_stdout;
+use buzzllm::types::{StreamResponse, StreamResponseType};
 
 #[test]
 fn test_output_text_normal() {

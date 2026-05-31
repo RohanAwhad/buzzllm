@@ -1,13 +1,58 @@
-use std::collections::HashMap;
-use serde_json::json;
+use crate::providers::{LlmClient, OpenAIChatClient, ToolSchemaFormat};
 use crate::types::{LlmOptions, RequestArgs, StreamResponse, StreamResponseType, ToolCallData};
+use serde_json::json;
+use std::collections::HashMap;
 
 const REASONING_MODELS: &[&str] = &[
-    "gpt-5.2", "gpt-5.1", "gpt-5", "gpt-5-mini", "o4-mini", "o3", "o3-pro", "gpt-5-pro",
+    "gpt-5.2",
+    "gpt-5.1",
+    "gpt-5",
+    "gpt-5-mini",
+    "o4-mini",
+    "o3",
+    "o3-pro",
+    "gpt-5-pro",
 ];
 
 fn is_reasoning_model(model: &str) -> bool {
     REASONING_MODELS.contains(&model) || model.starts_with("gpt-5")
+}
+
+impl LlmClient for OpenAIChatClient {
+    fn build_request(
+        &self,
+        opts: &LlmOptions,
+        prompt: &str,
+        system_prompt: &str,
+    ) -> anyhow::Result<RequestArgs> {
+        Ok(make_request_args(opts, prompt, system_prompt))
+    }
+
+    fn parse_sse_line(
+        &self,
+        line: &str,
+        message_started: bool,
+        tool_calls: &mut HashMap<String, ToolCallData>,
+        current_tool_call_id: &mut String,
+    ) -> Vec<StreamResponse> {
+        parse_sse_line(line, message_started, tool_calls, current_tool_call_id)
+    }
+
+    fn assemble_tool_messages(
+        &self,
+        messages: &mut Vec<serde_json::Value>,
+        tool_calls: &HashMap<String, ToolCallData>,
+    ) {
+        assemble_tool_messages(messages, tool_calls);
+    }
+
+    fn default_api_url(&self, _model: &str) -> String {
+        "https://api.openai.com/v1/chat/completions".into()
+    }
+
+    fn tool_schema_format(&self) -> ToolSchemaFormat {
+        ToolSchemaFormat::OpenAI
+    }
 }
 
 pub fn make_request_args(opts: &LlmOptions, prompt: &str, system_prompt: &str) -> RequestArgs {
@@ -72,16 +117,18 @@ pub fn parse_sse_line(
         Err(_) => return responses,
     };
 
-    // Handle response start
     if !message_started {
         if let Some(id) = chunk_data.get("id").and_then(|v| v.as_str()) {
             if !id.is_empty() {
-                responses.push(StreamResponse::new(id, "", StreamResponseType::ResponseStart));
+                responses.push(StreamResponse::new(
+                    id,
+                    "",
+                    StreamResponseType::ResponseStart,
+                ));
             }
         }
     }
 
-    // Handle content deltas
     let choices = match chunk_data.get("choices").and_then(|v| v.as_array()) {
         Some(c) if !c.is_empty() => c,
         _ => return responses,
@@ -93,34 +140,37 @@ pub fn parse_sse_line(
         None => return responses,
     };
 
-    // Regular content
     if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
         if !content.is_empty() {
-            responses.push(StreamResponse::new("", content, StreamResponseType::OutputText));
+            responses.push(StreamResponse::new(
+                "",
+                content,
+                StreamResponseType::OutputText,
+            ));
         }
     }
 
-    // Reasoning content
-    let reasoning = delta.get("reasoning").and_then(|v| v.as_str())
+    let reasoning = delta
+        .get("reasoning")
+        .and_then(|v| v.as_str())
         .or_else(|| delta.get("reasoning_content").and_then(|v| v.as_str()));
     if let Some(r) = reasoning {
         if !r.is_empty() {
-            responses.push(StreamResponse::new("", r, StreamResponseType::ReasoningContent));
+            responses.push(StreamResponse::new(
+                "",
+                r,
+                StreamResponseType::ReasoningContent,
+            ));
         }
     }
 
-    // Tool calls
     if let Some(tc_array) = delta.get("tool_calls").and_then(|v| v.as_array()) {
         for tc in tc_array {
             let mut tool_call_content = String::new();
 
-            // First chunk — create new tool call
             if let Some(id) = tc.get("id").and_then(|v| v.as_str()) {
                 *current_tool_call_id = id.to_string();
-                tool_calls.insert(
-                    id.to_string(),
-                    ToolCallData::new(id, ""),
-                );
+                tool_calls.insert(id.to_string(), ToolCallData::new(id, ""));
             }
 
             if let Some(function) = tc.get("function") {
@@ -144,7 +194,11 @@ pub fn parse_sse_line(
             }
 
             if !tool_call_content.is_empty() {
-                responses.push(StreamResponse::new("", tool_call_content, StreamResponseType::ToolCall));
+                responses.push(StreamResponse::new(
+                    "",
+                    tool_call_content,
+                    StreamResponseType::ToolCall,
+                ));
             }
         }
     }
@@ -160,21 +214,22 @@ pub fn assemble_tool_messages(
         return;
     }
 
-    // Add assistant message with tool calls
-    let tool_calls_list: Vec<serde_json::Value> = tool_calls.values().map(|tc| {
-        json!({
-            "id": tc.id,
-            "type": "function",
-            "function": {
-                "name": tc.name,
-                "arguments": tc.arguments,
-            }
+    let tool_calls_list: Vec<serde_json::Value> = tool_calls
+        .values()
+        .map(|tc| {
+            json!({
+                "id": tc.id,
+                "type": "function",
+                "function": {
+                    "name": tc.name,
+                    "arguments": tc.arguments,
+                }
+            })
         })
-    }).collect();
+        .collect();
 
     messages.push(json!({"role": "assistant", "tool_calls": tool_calls_list}));
 
-    // Add tool result messages
     for tc in tool_calls.values() {
         messages.push(json!({
             "role": "tool",

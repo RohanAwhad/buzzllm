@@ -1,8 +1,8 @@
-use clap::Parser;
 use buzzllm::providers::{self, ToolSchemaFormat};
 use buzzllm::tools::ToolRegistry;
 use buzzllm::types::LlmOptions;
-use buzzllm::{prompts, llm};
+use buzzllm::{llm, prompts};
+use clap::Parser;
 
 #[derive(Parser, Debug)]
 #[command(name = "buzzllm", about = "Invoke LLM with streaming response")]
@@ -57,15 +57,8 @@ fn init_logging() {
     let file_appender = tracing_appender::rolling::never("/tmp", "buzzllm.logs");
 
     tracing_subscriber::registry()
-        .with(
-            fmt::layer()
-                .with_writer(file_appender)
-                .with_ansi(false)
-        )
-        .with(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("buzzllm=debug"))
-        )
+        .with(fmt::layer().with_writer(file_appender).with_ansi(false))
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("buzzllm=debug")))
         .init();
 }
 
@@ -80,8 +73,7 @@ async fn chat(args: Cli) {
 
     let original_system_prompt = args.system_prompt.clone();
 
-    let system_prompt = prompts::get_prompt(&args.system_prompt)
-        .unwrap_or(&args.system_prompt);
+    let system_prompt = prompts::get_prompt(&args.system_prompt).unwrap_or(&args.system_prompt);
 
     let mut registry = ToolRegistry::new();
     let tools: Option<Vec<serde_json::Value>> = match original_system_prompt.as_str() {
@@ -134,7 +126,16 @@ async fn chat(args: Cli) {
         max_infer_iters: 10,
     };
 
-    llm::invoke_llm(&opts, &args.prompt, system_prompt, client.as_ref(), &registry, args.sse, args.brief).await;
+    llm::invoke_llm(
+        &opts,
+        &args.prompt,
+        system_prompt,
+        client.as_ref(),
+        &registry,
+        args.sse,
+        args.brief,
+    )
+    .await;
 }
 
 #[tokio::main]
@@ -152,10 +153,15 @@ mod tests {
     #[test]
     fn test_parse_minimal_args() {
         let args = Cli::try_parse_from([
-            "buzzllm", "gpt-4", "hello",
-            "--provider", "openai-chat",
-            "--api-key-name", "KEY",
-        ]).unwrap();
+            "buzzllm",
+            "gpt-4",
+            "hello",
+            "--provider",
+            "openai-chat",
+            "--api-key-name",
+            "KEY",
+        ])
+        .unwrap();
         assert_eq!(args.model, "gpt-4");
         assert_eq!(args.prompt, "hello");
         assert_eq!(args.provider, "openai-chat");
@@ -165,10 +171,15 @@ mod tests {
     #[test]
     fn test_defaults() {
         let args = Cli::try_parse_from([
-            "buzzllm", "gpt-4", "hello",
-            "--provider", "openai-chat",
-            "--api-key-name", "KEY",
-        ]).unwrap();
+            "buzzllm",
+            "gpt-4",
+            "hello",
+            "--provider",
+            "openai-chat",
+            "--api-key-name",
+            "KEY",
+        ])
+        .unwrap();
         assert_eq!(args.max_tokens, 8192);
         assert_eq!(args.temperature, 0.8);
         assert!(!args.think);
@@ -180,77 +191,120 @@ mod tests {
     #[test]
     fn test_custom_max_tokens() {
         let args = Cli::try_parse_from([
-            "buzzllm", "gpt-4", "hello",
-            "--provider", "openai-chat",
-            "--api-key-name", "KEY",
-            "--max-tokens", "4096",
-        ]).unwrap();
+            "buzzllm",
+            "gpt-4",
+            "hello",
+            "--provider",
+            "openai-chat",
+            "--api-key-name",
+            "KEY",
+            "--max-tokens",
+            "4096",
+        ])
+        .unwrap();
         assert_eq!(args.max_tokens, 4096);
     }
 
     #[test]
     fn test_custom_temperature() {
         let args = Cli::try_parse_from([
-            "buzzllm", "gpt-4", "hello",
-            "--provider", "openai-chat",
-            "--api-key-name", "KEY",
-            "--temperature", "0.5",
-        ]).unwrap();
+            "buzzllm",
+            "gpt-4",
+            "hello",
+            "--provider",
+            "openai-chat",
+            "--api-key-name",
+            "KEY",
+            "--temperature",
+            "0.5",
+        ])
+        .unwrap();
         assert_eq!(args.temperature, 0.5);
     }
 
     #[test]
     fn test_think_flag() {
         let args = Cli::try_parse_from([
-            "buzzllm", "gpt-4", "hello",
-            "--provider", "openai-chat",
-            "--api-key-name", "KEY",
+            "buzzllm",
+            "gpt-4",
+            "hello",
+            "--provider",
+            "openai-chat",
+            "--api-key-name",
+            "KEY",
             "--think",
-        ]).unwrap();
+        ])
+        .unwrap();
         assert!(args.think);
     }
 
     #[test]
     fn test_sse_short_flag() {
         let args = Cli::try_parse_from([
-            "buzzllm", "gpt-4", "hello",
-            "--provider", "openai-chat",
-            "--api-key-name", "KEY",
+            "buzzllm",
+            "gpt-4",
+            "hello",
+            "--provider",
+            "openai-chat",
+            "--api-key-name",
+            "KEY",
             "-S",
-        ]).unwrap();
+        ])
+        .unwrap();
         assert!(args.sse);
     }
 
     #[test]
     fn test_brief_flag() {
         let args = Cli::try_parse_from([
-            "buzzllm", "gpt-4", "hello",
-            "--provider", "openai-chat",
-            "--api-key-name", "KEY",
+            "buzzllm",
+            "gpt-4",
+            "hello",
+            "--provider",
+            "openai-chat",
+            "--api-key-name",
+            "KEY",
             "-b",
-        ]).unwrap();
+        ])
+        .unwrap();
         assert!(args.brief);
     }
 
     #[test]
     fn test_url_flag() {
         let args = Cli::try_parse_from([
-            "buzzllm", "gpt-4", "hello",
-            "--provider", "openai-chat",
-            "--api-key-name", "KEY",
-            "--url", "https://custom.example.com/v1",
-        ]).unwrap();
+            "buzzllm",
+            "gpt-4",
+            "hello",
+            "--provider",
+            "openai-chat",
+            "--api-key-name",
+            "KEY",
+            "--url",
+            "https://custom.example.com/v1",
+        ])
+        .unwrap();
         assert_eq!(args.url.unwrap(), "https://custom.example.com/v1");
     }
 
     #[test]
     fn test_all_providers_accepted() {
-        for p in &["openai-chat", "openai-responses", "anthropic", "vertexai-anthropic"] {
+        for p in &[
+            "openai-chat",
+            "openai-responses",
+            "anthropic",
+            "vertexai-anthropic",
+        ] {
             let args = Cli::try_parse_from([
-                "buzzllm", "gpt-4", "hello",
-                "--provider", p,
-                "--api-key-name", "KEY",
-            ]).unwrap();
+                "buzzllm",
+                "gpt-4",
+                "hello",
+                "--provider",
+                p,
+                "--api-key-name",
+                "KEY",
+            ])
+            .unwrap();
             assert_eq!(args.provider, *p);
         }
     }
@@ -258,27 +312,26 @@ mod tests {
     #[test]
     fn test_invalid_provider_rejected() {
         let result = Cli::try_parse_from([
-            "buzzllm", "gpt-4", "hello",
-            "--provider", "invalid-provider",
-            "--api-key-name", "KEY",
+            "buzzllm",
+            "gpt-4",
+            "hello",
+            "--provider",
+            "invalid-provider",
+            "--api-key-name",
+            "KEY",
         ]);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_missing_provider_rejected() {
-        let result = Cli::try_parse_from([
-            "buzzllm", "gpt-4", "hello",
-            "--api-key-name", "KEY",
-        ]);
+        let result = Cli::try_parse_from(["buzzllm", "gpt-4", "hello", "--api-key-name", "KEY"]);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_missing_model_rejected() {
-        let result = Cli::try_parse_from([
-            "buzzllm", "--provider", "openai-chat",
-        ]);
+        let result = Cli::try_parse_from(["buzzllm", "--provider", "openai-chat"]);
         assert!(result.is_err());
     }
 }
