@@ -2,7 +2,11 @@ use crate::types::{StreamResponse, StreamResponseType};
 use std::io::{self, Write};
 
 pub fn print_to_stdout(data: &StreamResponse, sse: bool, brief: bool) {
-    // Brief mode: skip tool calls and results
+    let stdout = io::stdout();
+    print_to_writer(data, sse, brief, &mut stdout.lock());
+}
+
+pub fn print_to_writer(data: &StreamResponse, sse: bool, brief: bool, out: &mut impl Write) {
     if brief
         && matches!(
             data.response_type,
@@ -11,9 +15,6 @@ pub fn print_to_stdout(data: &StreamResponse, sse: bool, brief: bool) {
     {
         return;
     }
-
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
 
     if sse {
         let _ = writeln!(out, "event: {}", data.response_type);
