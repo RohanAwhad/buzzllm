@@ -161,14 +161,17 @@ impl super::Tool for BashFind {
                 cmd_parts.push(name.to_string());
             }
         } else {
-            cmd_parts = vec!["rg".to_string(), "--files".to_string()];
+            cmd_parts = vec![
+                "rg".to_string(),
+                "--files".to_string(),
+                "--no-ignore".to_string(),
+                "--no-ignore-parent".to_string(),
+            ];
             if !name.is_empty() {
                 cmd_parts.push("--glob".to_string());
                 cmd_parts.push(name.to_string());
             }
-            if path != "." {
-                cmd_parts.push(validated_path.to_string_lossy().to_string());
-            }
+            cmd_parts.push(validated_path.to_string_lossy().to_string());
         }
 
         if !extra_args.is_empty() {
@@ -274,10 +277,10 @@ impl super::Tool for BashRipgrep {
         };
 
         let mut cmd = Command::new("rg");
+        cmd.arg("--no-ignore");
+        cmd.arg("--no-ignore-parent");
         cmd.arg(pattern);
-        if files != "." {
-            cmd.arg(validated_files.to_string_lossy().as_ref());
-        }
+        cmd.arg(validated_files.to_string_lossy().as_ref());
         if !extra_args.is_empty() {
             for arg in extra_args.split_whitespace() {
                 cmd.arg(arg);
