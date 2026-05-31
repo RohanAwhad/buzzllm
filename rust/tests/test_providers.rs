@@ -322,9 +322,12 @@ fn test_openai_chat_assemble_multi_tool() {
     assert!(call_ids.contains(&"call_2"));
 
     assert_eq!(messages[2]["role"], "tool");
-    assert_eq!(messages[2]["tool_call_id"], "call_1");
     assert_eq!(messages[3]["role"], "tool");
-    assert_eq!(messages[3]["tool_call_id"], "call_2");
+    let tool_ids: Vec<&str> = (2..4)
+        .map(|i| messages[i]["tool_call_id"].as_str().unwrap())
+        .collect();
+    assert!(tool_ids.contains(&"call_1"));
+    assert!(tool_ids.contains(&"call_2"));
 }
 
 #[test]
@@ -562,10 +565,7 @@ fn test_anthropic_assemble_multi_tool() {
     assert_eq!(messages[1]["role"], "assistant");
     let content = messages[1]["content"].as_array().unwrap();
     assert_eq!(content.len(), 2);
-    let use_ids: Vec<&str> = content
-        .iter()
-        .map(|b| b["id"].as_str().unwrap())
-        .collect();
+    let use_ids: Vec<&str> = content.iter().map(|b| b["id"].as_str().unwrap()).collect();
     assert!(use_ids.contains(&"toolu_1"));
     assert!(use_ids.contains(&"toolu_2"));
 
@@ -583,9 +583,8 @@ fn test_anthropic_assemble_multi_tool() {
 #[test]
 fn test_anthropic_assemble_preserves_existing() {
     let c = providers::create_client("anthropic").unwrap();
-    let mut messages: Vec<serde_json::Value> = vec![
-        serde_json::json!({"role": "user", "content": "hi"}),
-    ];
+    let mut messages: Vec<serde_json::Value> =
+        vec![serde_json::json!({"role": "user", "content": "hi"})];
     let orig_len = messages.len();
     let mut tc = HashMap::new();
     let mut tcd = ToolCallData::new("toolu_1", "search_web");
