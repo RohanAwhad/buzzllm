@@ -1,120 +1,190 @@
 # BuzzLLM
 
-This is a gateway for all llm tasks that I need to do. Examples:
-1. Websearch
-2. Python Code Execution
-3. Ask questions about local code repo
-4. Make changes
-
-### How to Run:
-
-1. Setup:
-    ```bash
-    git clone https://github.com/RohanAwhad/buzzllm.git
-    cd buzzllm
-    uv venv -p 3.10
-    source .venv/bin/activate
-    uv pip install .
-    ```
-
-2. Run generation:
-    ```bash
-    buzzllm "gpt-4o-mini" \
-        "https://api.openai.com/v1/chat/completions" \
-        "hello, world" \
-        --provider openai-chat \
-        --api-key-name OPENAI_API_KEY \
-        --system-prompt "You are a helpful agent" 
-    ```
-
-### Notes:
-
-1. `--provider openai-chat`: It uses openai chat completion compatible api endpoint for llm calls
-2. `--system-prompt websearch`: It uses the pre-built websearch system prompt and tools
-    - Available templates:
-        1. `websearch`: Used for answering general questions that require websearch. Uses `search_web`, and `scrape_webpage` tools
-        2. `codesearch`: Used for answering questions about current codebase. Uses `bash_find`, `bash_grep`, and `bash_read` tools
-        3. `pythonexec`: Used for executing python code in a kernel as a tool for the llm answer generation.
-        4. `hackhub`: Used for "Apply Changes" functionality from Cursor in neovim. Generates changes in Search-Replace blocks.
-
-
-### Usage examples:
-
-- help
-    ```bash
-    buzzllm -h
-    ```
-- websearch
-    ```bash
-    buzzllm "gpt-4o-mini" \
-        "https://api.openai.com/v1/chat/completions" \
-        "What was low for Meta's stock price yesterday? Today is July 1, 2025" \
-        --provider openai-chat \
-        --api-key-name OPENAI_API_KEY \
-        --system-prompt websearch 
-    ```
-- codesearch
-    ```bash
-    buzzllm "gpt-4o-mini" \
-        "https://api.openai.com/v1/chat/completions" \
-        "in the current repo for scraping url contents what do we use?" \
-        --provider openai-chat \
-        --api-key-name OPENAI_API_KEY \
-        --system-prompt codesearch 
-    ```
-- pythonexec
-    ```bash
-    # before running python execution template,
-    # we need a docker container to execute code safely
-
-    cd python_runtime_docker
-    bash build_docker.sh build-python-exec
-    cd ../
-    ```
-    ```bash
-    # Now we can run the python execution
-
-    buzzllm "gpt-4o-mini" \
-        "https://api.openai.com/v1/chat/completions" \
-        "solve the equation 5 = mx + c, where m = 4/2 and x = 1. use python to write code and execute" \
-        --provider openai-chat \
-        --api-key-name OPENAI_API_KEY \
-        --system-prompt pythonexec
-    ```
-- hackhub: We will be using claude sonnet 4 here. Its pretty easy to change provider.
-    ```bash
-    buzzllm "claude-sonnet-4-20250514" \
-        "https://api.anthropic.com/v1/messages" \
-        "$(cat src/buzzllm/main.py)\nI need you to add a new tools argument to cli. There will be multiple tools, and in help provide a list of available tools" \
-        --provider anthropic \
-        --api-key-name ANTHROPIC_API_KEY \
-        --system-prompt hackhub
-    ```
-- brief mode (hide tool calls/results, show only final output)
-    ```bash
-    buzzllm "gpt-4o-mini" \
-        "https://api.openai.com/v1/chat/completions" \
-        "What is the weather in NYC?" \
-        --provider openai-chat \
-        --api-key-name OPENAI_API_KEY \
-        --system-prompt websearch \
-        --brief
-    ```
-
-### Testing
+LLM gateway CLI — stream responses from any provider, with tools. Web search, codebase exploration, Python execution, file editing, shell commands.
 
 ```bash
-# Install test dependencies
-uv pip install -e ".[test]"
+buzzllm gpt-4.1-mini "Say hello" --provider openai-chat --api-key-name OPENAI_API_KEY
+# → Hello! How can I help you today?
+# === [ DONE ] ===
+```
 
-# Run all tests
-uv run pytest
+## Install
 
-# Run by category
-uv run pytest tests/unit -v          # unit tests
-uv run pytest tests/integration -v   # requires API keys
-uv run pytest tests/e2e -v           # CLI tests
+Requires Rust toolchain (1.75+).
 
-# With coverage
-uv run pytest --cov=buzzllm
+```bash
+git clone https://github.com/RohanAwhad/buzzllm.git
+cd buzzllm/rust
+cargo build --release
+# Binary: target/release/buzzllm (~8.8 MB)
+```
+
+Optionally copy to PATH:
+```bash
+cp target/release/buzzllm /usr/local/bin/
+```
+
+## Quick start
+
+```bash
+# OpenAI Chat Completions (default URL: https://api.openai.com/v1/chat/completions)
+buzzllm gpt-4.1-mini "What is 2+2?" --provider openai-chat --api-key-name OPENAI_API_KEY
+
+# Anthropic (default URL: https://api.anthropic.com/v1/messages)
+buzzllm claude-sonnet-4-20250514 "Hello" --provider anthropic --api-key-name ANTHROPIC_API_KEY
+
+# Override URL (vLLM, LiteLLM proxy, region endpoints)
+buzzllm mistral-7b "Hi" --provider openai-chat --api-key-name OPENAI_API_KEY --url http://localhost:8000/v1/chat/completions
+
+# SSE output mode
+buzzllm gpt-4.1-mini "Hello" --provider openai-chat --api-key-name OPENAI_API_KEY -S
+
+# Brief mode (hide tool calls, show only final output)
+buzzllm gpt-4.1-mini "What is the weather?" --provider openai-chat --api-key-name OPENAI_API_KEY --system-prompt websearch -b
+
+# Thinking mode (Claude extended thinking or OpenAI reasoning effort)
+buzzllm claude-sonnet-4-20250514 "Solve this problem..." --provider anthropic --api-key-name ANTHROPIC_API_KEY --think
+```
+
+## Providers
+
+| Provider | `--provider` value | Default URL |
+|----------|-------------------|-------------|
+| OpenAI Chat Completions | `openai-chat` | `https://api.openai.com/v1/chat/completions` |
+| OpenAI Responses | `openai-responses` | `https://api.openai.com/v1/responses` |
+| Anthropic Messages | `anthropic` | `https://api.anthropic.com/v1/messages` |
+| Vertex AI Anthropic | `vertexai-anthropic` | none (requires `--url`) |
+
+The URL is optional — each provider has a sensible default. Override with `--url` for proxies, vLLM endpoints, or cloud region-specific URLs.
+
+Auth: `--api-key-name` specifies the environment variable holding the API key. For Vertex AI, the tool reads `gcloud auth print-access-token` automatically.
+
+## System prompts & tools
+
+BuzzLLM ships with 7 system prompts. Each registers a specific set of tools:
+
+### `websearch`
+Web search via DuckDuckGo (with Brave fallback) + webpage scraping.
+
+**Tools:** `search_web`, `scrape_webpage`
+```bash
+buzzllm gpt-4.1-mini "Latest AI news?" --provider openai-chat --api-key-name OPENAI_API_KEY --system-prompt websearch
+```
+
+### `codesearch`
+Explore local codebase: find files, grep text, read file contents.
+
+**Tools:** `bash_find`, `bash_ripgrep`, `bash_read`
+```bash
+buzzllm gpt-4.1-mini "Where is error handling defined?" --provider openai-chat --api-key-name OPENAI_API_KEY --system-prompt codesearch
+```
+
+### `coding`
+Full coding agent: read/edit files, execute shell commands, search the web.
+
+**Tools:** `bash_read`, `write_file`, `bash`, `search_web`, `scrape_webpage`
+```bash
+# Read a file
+buzzllm gpt-4.1-mini "Show me Cargo.toml" --provider openai-chat --api-key-name OPENAI_API_KEY --system-prompt coding
+
+# Edit a file
+buzzllm gpt-4.1-mini "Change version to 0.3.0 in Cargo.toml" --provider openai-chat --api-key-name OPENAI_API_KEY --system-prompt coding
+
+# Create new files (pass empty old_string)
+buzzllm gpt-4.1-mini "Create src/hello.rs with a hello world Rust program" --provider openai-chat --api-key-name OPENAI_API_KEY --system-prompt coding
+
+# Run tests
+buzzllm gpt-4.1-mini "Run the test suite" --provider openai-chat --api-key-name OPENAI_API_KEY --system-prompt coding
+
+# Meta-agent: invoke another agent via bash
+buzzllm gpt-4.1-mini "Research X using websearch" --provider openai-chat --api-key-name OPENAI_API_KEY --system-prompt coding
+```
+
+`write_file` uses exact string replacement — the `old_string` must match exactly once in the file. Pass empty `old_string` to create a new file.
+
+### `pythonexec`
+Execute Python code in a Docker container for safe sandboxed execution.
+
+**Tools:** `python_execute`
+
+**Prerequisites:** build the Docker image first:
+```bash
+cd python_runtime_docker
+bash build_docker.sh build-python-exec
+cd ..
+```
+
+```bash
+buzzllm gpt-4.1-mini "Solve 5 = mx + c where m=4/2, x=1 using Python" \
+  --provider openai-chat --api-key-name OPENAI_API_KEY --system-prompt pythonexec
+```
+
+### `replace`
+Generates search-replace code change blocks. For code modification workflows that output structured patches.
+
+### `generate`
+General code generation.
+
+### `helpful`
+Default helpful assistant (no tools).
+
+### Custom prompt
+
+Pass any text as the system prompt:
+```bash
+buzzllm gpt-4.1-mini "Tell me a joke" --provider openai-chat --api-key-name OPENAI_API_KEY --system-prompt "You are a comedian."
+```
+
+## OpenCLI / BuzzLLM Gateway integration
+
+BuzzLLM also serves as a gateway tool for OpenCLI and Claude Code via the [BuzzLLM Gateway skill](https://github.com/RohanAwhad/buzzllm). When used as a skill, BuzzLLM can perform web searches, execute Python code, and analyze codebases programmatically.
+
+## Dev mode (debug logs)
+
+Logs written to `/tmp/buzzllm.logs` at debug level. Controlled via `LOGGING_LEVEL` env var:
+```bash
+LOGGING_LEVEL=debug buzzllm ...
+```
+
+## Architecture
+
+```
+src/
+  main.rs          CLI (clap) + prompt resolution + tool registration
+  llm.rs           invoke_llm() streaming loop, SSE parsing, tool execution
+  types.rs         LlmOptions, RequestArgs, StreamResponse, ToolCallData
+  output.rs        Colored stdout or SSE event format
+  providers/
+    mod.rs         LlmClient trait + 4 implementations + create_client() factory
+    openai_chat.rs        /v1/chat/completions
+    openai_responses.rs   /v1/responses
+    anthropic.rs          /v1/messages
+    vertexai_anthropic.rs GCP Vertex AI (delegates SSE to anthropic)
+  tools/
+    mod.rs         Tool trait + ToolRegistry
+    codesearch.rs  BashFind (rg --files), BashRipgrep (rg), BashRead
+    websearch.rs   SearchWeb (DDG → Brave fallback), ScrapeWebpage (reqwest + scraper)
+    pythonexec.rs  PythonExecute (Docker via bollard)
+    write_file.rs  WriteFile (exact string replace)
+    bash.rs        Bash (arbitrary shell commands)
+  prompts/
+    mod.rs         get_prompt() + prompt_names()
+    *.txt          7 prompt templates (include_str! at compile time)
+```
+
+See `.dingllm/specs/v2/` for C4 architecture and sequence diagrams.
+
+## Testing
+
+Rust tests (WIP):
+```bash
+cd rust
+cargo test
+```
+
+Python test suite (reference):
+```bash
+uv run pytest tests/unit -v          # unit (no network/Docker)
+uv run pytest tests/integration -v   # needs API keys
+uv run pytest tests/e2e -v           # CLI smoke tests
 ```
