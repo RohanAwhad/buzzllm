@@ -333,7 +333,8 @@ mod tests {
 
     #[test]
     fn test_missing_provider_rejected() {
-        let result = Cli::try_parse_from(["buzzllm", "gpt-4", "", "hello", "--api-key-name", "KEY"]);
+        let result =
+            Cli::try_parse_from(["buzzllm", "gpt-4", "", "hello", "--api-key-name", "KEY"]);
         assert!(result.is_err());
     }
 
