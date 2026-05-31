@@ -18,7 +18,10 @@ fn test_search_web_openai_schema() {
     assert_eq!(schema["function"]["name"], "search_web");
     let params = &schema["function"]["parameters"];
     assert!(params["properties"]["query"]["type"] == "string");
-    assert!(params["required"].as_array().unwrap().contains(&json!("query")));
+    assert!(params["required"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("query")));
 }
 
 #[test]
@@ -45,7 +48,10 @@ fn test_scrape_webpage_openai_schema() {
     assert_eq!(schema["function"]["name"], "scrape_webpage");
     let params = &schema["function"]["parameters"];
     assert!(params["properties"]["url"]["type"] == "string");
-    assert!(params["required"].as_array().unwrap().contains(&json!("url")));
+    assert!(params["required"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("url")));
 }
 
 #[test]

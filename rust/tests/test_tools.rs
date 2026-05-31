@@ -397,9 +397,7 @@ async fn test_bash_find_pagination_limit() {
     fs::write(dir.path().join("c.md"), "").unwrap();
     let _guard = std::env::set_current_dir(dir.path());
 
-    let result = BashFind
-        .execute(json!({"path": ".", "limit": 2}))
-        .await;
+    let result = BashFind.execute(json!({"path": ".", "limit": 2})).await;
     let results = result["results"].as_array().unwrap();
     assert_eq!(results.len(), 2);
 }
@@ -412,9 +410,7 @@ async fn test_bash_find_pagination_offset() {
     fs::write(dir.path().join("c.md"), "").unwrap();
     let _guard = std::env::set_current_dir(dir.path());
 
-    let all = BashFind
-        .execute(json!({"path": ".", "limit": 0}))
-        .await;
+    let all = BashFind.execute(json!({"path": ".", "limit": 0})).await;
     let offset = BashFind
         .execute(json!({"path": ".", "limit": 0, "offset": 1}))
         .await;
