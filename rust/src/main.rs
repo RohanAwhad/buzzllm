@@ -10,9 +10,8 @@ struct Cli {
     /// LLM model name
     model: String,
 
-    /// LLM API URL (optional — uses provider default if not set)
-    #[arg(long)]
-    url: Option<String>,
+    /// LLM API URL (pass empty string for provider default)
+    url: String,
 
     /// User prompt
     prompt: String,
@@ -117,7 +116,7 @@ async fn chat(args: Cli) {
 
     let opts = LlmOptions {
         model: args.model,
-        url: args.url.unwrap_or_default(),
+        url: args.url,
         api_key_name: Some(args.api_key_name),
         max_tokens: Some(args.max_tokens),
         temperature: args.temperature,
@@ -155,6 +154,7 @@ mod tests {
         let args = Cli::try_parse_from([
             "buzzllm",
             "gpt-4",
+            "",
             "hello",
             "--provider",
             "openai-chat",
@@ -163,6 +163,7 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(args.model, "gpt-4");
+        assert_eq!(args.url, "");
         assert_eq!(args.prompt, "hello");
         assert_eq!(args.provider, "openai-chat");
         assert_eq!(args.api_key_name, "KEY");
@@ -173,6 +174,7 @@ mod tests {
         let args = Cli::try_parse_from([
             "buzzllm",
             "gpt-4",
+            "",
             "hello",
             "--provider",
             "openai-chat",
@@ -185,7 +187,7 @@ mod tests {
         assert!(!args.think);
         assert!(!args.sse);
         assert!(!args.brief);
-        assert!(args.url.is_none());
+        assert_eq!(args.url, "");
     }
 
     #[test]
@@ -193,6 +195,7 @@ mod tests {
         let args = Cli::try_parse_from([
             "buzzllm",
             "gpt-4",
+            "",
             "hello",
             "--provider",
             "openai-chat",
@@ -210,6 +213,7 @@ mod tests {
         let args = Cli::try_parse_from([
             "buzzllm",
             "gpt-4",
+            "",
             "hello",
             "--provider",
             "openai-chat",
@@ -227,6 +231,7 @@ mod tests {
         let args = Cli::try_parse_from([
             "buzzllm",
             "gpt-4",
+            "",
             "hello",
             "--provider",
             "openai-chat",
@@ -243,6 +248,7 @@ mod tests {
         let args = Cli::try_parse_from([
             "buzzllm",
             "gpt-4",
+            "",
             "hello",
             "--provider",
             "openai-chat",
@@ -259,6 +265,7 @@ mod tests {
         let args = Cli::try_parse_from([
             "buzzllm",
             "gpt-4",
+            "",
             "hello",
             "--provider",
             "openai-chat",
@@ -271,20 +278,19 @@ mod tests {
     }
 
     #[test]
-    fn test_url_flag() {
+    fn test_url_positional() {
         let args = Cli::try_parse_from([
             "buzzllm",
             "gpt-4",
+            "https://custom.example.com/v1",
             "hello",
             "--provider",
             "openai-chat",
             "--api-key-name",
             "KEY",
-            "--url",
-            "https://custom.example.com/v1",
         ])
         .unwrap();
-        assert_eq!(args.url.unwrap(), "https://custom.example.com/v1");
+        assert_eq!(args.url, "https://custom.example.com/v1");
     }
 
     #[test]
@@ -298,6 +304,7 @@ mod tests {
             let args = Cli::try_parse_from([
                 "buzzllm",
                 "gpt-4",
+                "",
                 "hello",
                 "--provider",
                 p,
@@ -314,6 +321,7 @@ mod tests {
         let result = Cli::try_parse_from([
             "buzzllm",
             "gpt-4",
+            "",
             "hello",
             "--provider",
             "invalid-provider",
@@ -325,7 +333,7 @@ mod tests {
 
     #[test]
     fn test_missing_provider_rejected() {
-        let result = Cli::try_parse_from(["buzzllm", "gpt-4", "hello", "--api-key-name", "KEY"]);
+        let result = Cli::try_parse_from(["buzzllm", "gpt-4", "", "hello", "--api-key-name", "KEY"]);
         assert!(result.is_err());
     }
 
