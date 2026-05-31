@@ -14,7 +14,7 @@ graph TD
         LLM[llm.rs<br/><i>invoke_llm loop</i><br/>SSE streaming via reqwest,<br/>tool execution, iteration cap]
 
         subgraph PROVIDERS["providers mod"]
-            PMOD[mod.rs<br/><i>Provider enum + dispatch</i>]
+            PMOD[mod.rs<br/><i>LlmClient trait + create_client() factory</i>]
             OC[openai_chat.rs<br/><i>request builder + SSE parser<br/>+ message assembler</i>]
             OR[openai_responses.rs<br/><i>request builder + SSE parser</i>]
             AN[anthropic.rs<br/><i>request builder + SSE parser<br/>+ message assembler</i>]
@@ -26,6 +26,8 @@ graph TD
             CS[codesearch.rs<br/><i>BashFind, BashRipgrep, BashRead</i><br/>subprocess via tokio::process]
             WS[websearch.rs<br/><i>SearchWeb, ScrapeWebpage</i><br/>DDG + Brave + HTML-to-markdown]
             PE[pythonexec.rs<br/><i>PythonExecute</i><br/>bollard Docker + TCP socket]
+            WF[write_file.rs<br/><i>WriteFile</i><br/>exact string replace in files]
+            BA[bash.rs<br/><i>Bash</i><br/>arbitrary shell commands]
         end
     end
 

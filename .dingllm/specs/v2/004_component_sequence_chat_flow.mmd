@@ -22,7 +22,7 @@ sequenceDiagram
     main->>llm: invoke_llm(opts, prompt, system_prompt, provider, registry, sse, brief)
 
     loop for each iteration (max_infer_iters)
-        llm->>provider: make_request_args(opts, prompt, system_prompt)
+        llm->>provider: build_request(opts, prompt, system_prompt)
         provider-->>llm: RequestArgs (data + headers)
 
         llm->>api: POST streaming request (reqwest, timeout=900s)

@@ -294,7 +294,58 @@ fn test_openai_chat_assemble_single_tool() {
     assert_eq!(messages[2]["tool_call_id"], "call_1");
 }
 
-// ============================================================
+#[test]
+fn test_openai_chat_assemble_multi_tool() {
+    let c = providers::create_client("openai-chat").unwrap();
+    let mut messages: Vec<serde_json::Value> =
+        vec![serde_json::json!({"role": "user", "content": "hi"})];
+    let mut tc = HashMap::new();
+
+    let mut tcd1 = ToolCallData::new("call_1", "search_web");
+    tcd1.arguments = r#"{"query":"test"}"#.into();
+    tcd1.result = Some(serde_json::json!({"results": []}));
+    tc.insert("call_1".into(), tcd1);
+
+    let mut tcd2 = ToolCallData::new("call_2", "bash_read");
+    tcd2.arguments = r#"{"path":"src/main.rs"}"#.into();
+    tcd2.result = Some(serde_json::json!("file contents"));
+    tc.insert("call_2".into(), tcd2);
+
+    c.assemble_tool_messages(&mut messages, &tc);
+    assert_eq!(messages.len(), 4);
+
+    assert_eq!(messages[1]["role"], "assistant");
+    let calls = messages[1]["tool_calls"].as_array().unwrap();
+    assert_eq!(calls.len(), 2);
+    let call_ids: Vec<&str> = calls.iter().map(|c| c["id"].as_str().unwrap()).collect();
+    assert!(call_ids.contains(&"call_1"));
+    assert!(call_ids.contains(&"call_2"));
+
+    assert_eq!(messages[2]["role"], "tool");
+    assert_eq!(messages[2]["tool_call_id"], "call_1");
+    assert_eq!(messages[3]["role"], "tool");
+    assert_eq!(messages[3]["tool_call_id"], "call_2");
+}
+
+#[test]
+fn test_openai_chat_assemble_preserves_existing() {
+    let c = providers::create_client("openai-chat").unwrap();
+    let mut messages: Vec<serde_json::Value> = vec![
+        serde_json::json!({"role": "system", "content": "You are helpful."}),
+        serde_json::json!({"role": "user", "content": "hi"}),
+    ];
+    let orig_len = messages.len();
+    let mut tc = HashMap::new();
+    let mut tcd = ToolCallData::new("call_1", "search_web");
+    tcd.arguments = r#"{"query":"test"}"#.into();
+    tcd.result = Some(serde_json::json!({"results": []}));
+    tc.insert("call_1".into(), tcd);
+
+    c.assemble_tool_messages(&mut messages, &tc);
+    assert_eq!(messages.len(), orig_len + 2);
+    assert_eq!(messages[0]["role"], "system");
+    assert_eq!(messages[1]["role"], "user");
+}
 // Anthropic — Request Builder
 // ============================================================
 
@@ -486,6 +537,65 @@ fn test_anthropic_assemble_single_tool() {
     let results = messages[2]["content"].as_array().unwrap();
     assert_eq!(results[0]["type"], "tool_result");
     assert_eq!(results[0]["tool_use_id"], "toolu_1");
+}
+
+#[test]
+fn test_anthropic_assemble_multi_tool() {
+    let c = providers::create_client("anthropic").unwrap();
+    let mut messages: Vec<serde_json::Value> =
+        vec![serde_json::json!({"role": "user", "content": "hi"})];
+    let mut tc = HashMap::new();
+
+    let mut tcd1 = ToolCallData::new("toolu_1", "search_web");
+    tcd1.arguments = r#"{"query":"rust"}"#.into();
+    tcd1.result = Some(serde_json::json!({"results": []}));
+    tc.insert("toolu_1".into(), tcd1);
+
+    let mut tcd2 = ToolCallData::new("toolu_2", "bash_read");
+    tcd2.arguments = r#"{"path":"Cargo.toml"}"#.into();
+    tcd2.result = Some(serde_json::json!("[package]"));
+    tc.insert("toolu_2".into(), tcd2);
+
+    c.assemble_tool_messages(&mut messages, &tc);
+    assert_eq!(messages.len(), 3);
+
+    assert_eq!(messages[1]["role"], "assistant");
+    let content = messages[1]["content"].as_array().unwrap();
+    assert_eq!(content.len(), 2);
+    let use_ids: Vec<&str> = content
+        .iter()
+        .map(|b| b["id"].as_str().unwrap())
+        .collect();
+    assert!(use_ids.contains(&"toolu_1"));
+    assert!(use_ids.contains(&"toolu_2"));
+
+    assert_eq!(messages[2]["role"], "user");
+    let results = messages[2]["content"].as_array().unwrap();
+    assert_eq!(results.len(), 2);
+    let ids: Vec<&str> = results
+        .iter()
+        .map(|r| r["tool_use_id"].as_str().unwrap())
+        .collect();
+    assert!(ids.contains(&"toolu_1"));
+    assert!(ids.contains(&"toolu_2"));
+}
+
+#[test]
+fn test_anthropic_assemble_preserves_existing() {
+    let c = providers::create_client("anthropic").unwrap();
+    let mut messages: Vec<serde_json::Value> = vec![
+        serde_json::json!({"role": "user", "content": "hi"}),
+    ];
+    let orig_len = messages.len();
+    let mut tc = HashMap::new();
+    let mut tcd = ToolCallData::new("toolu_1", "search_web");
+    tcd.arguments = r#"{"query":"rust"}"#.into();
+    tcd.result = Some(serde_json::json!({"results": []}));
+    tc.insert("toolu_1".into(), tcd);
+
+    c.assemble_tool_messages(&mut messages, &tc);
+    assert_eq!(messages.len(), orig_len + 2);
+    assert_eq!(messages[0]["role"], "user");
 }
 
 // ============================================================
