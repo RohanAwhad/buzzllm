@@ -348,3 +348,130 @@ async fn test_bash_ripgrep_no_match() {
         .await;
     assert!(result.get("error").is_some());
 }
+
+// ============================================================
+// Codesearch — Path Validation
+// ============================================================
+
+#[tokio::test]
+async fn test_bash_find_invalid_path() {
+    let result = BashFind
+        .execute(json!({"path": "/nonexistent/path/xyzzy", "limit": 10}))
+        .await;
+    assert!(result.get("error").is_some());
+}
+
+#[tokio::test]
+async fn test_bash_find_path_outside_cwd() {
+    let result = BashFind
+        .execute(json!({"path": "../outside", "limit": 10}))
+        .await;
+    assert!(result.get("error").is_some());
+}
+
+#[tokio::test]
+async fn test_bash_ripgrep_invalid_path() {
+    let result = BashRipgrep
+        .execute(json!({"pattern": "hello", "files": "/nonexistent/xyzzy"}))
+        .await;
+    assert!(result.get("error").is_some());
+}
+
+#[tokio::test]
+async fn test_bash_read_invalid_path() {
+    let result = BashRead
+        .execute(json!({"filepath": "/nonexistent/file.txt"}))
+        .await;
+    assert!(result.get("error").is_some());
+}
+
+// ============================================================
+// Codesearch — Pagination
+// ============================================================
+
+#[tokio::test]
+async fn test_bash_find_pagination_limit() {
+    let dir = TempDir::new().unwrap();
+    fs::write(dir.path().join("a.rs"), "").unwrap();
+    fs::write(dir.path().join("b.py"), "").unwrap();
+    fs::write(dir.path().join("c.md"), "").unwrap();
+    let _guard = std::env::set_current_dir(dir.path());
+
+    let result = BashFind
+        .execute(json!({"path": ".", "limit": 2}))
+        .await;
+    let results = result["results"].as_array().unwrap();
+    assert_eq!(results.len(), 2);
+}
+
+#[tokio::test]
+async fn test_bash_find_pagination_offset() {
+    let dir = TempDir::new().unwrap();
+    fs::write(dir.path().join("a.rs"), "").unwrap();
+    fs::write(dir.path().join("b.py"), "").unwrap();
+    fs::write(dir.path().join("c.md"), "").unwrap();
+    let _guard = std::env::set_current_dir(dir.path());
+
+    let all = BashFind
+        .execute(json!({"path": ".", "limit": 0}))
+        .await;
+    let offset = BashFind
+        .execute(json!({"path": ".", "limit": 0, "offset": 1}))
+        .await;
+    let all_results = all["results"].as_array().unwrap();
+    let offset_results = offset["results"].as_array().unwrap();
+    assert_eq!(offset_results.len(), all_results.len() - 1);
+}
+
+#[tokio::test]
+async fn test_bash_ripgrep_pagination_limit() {
+    let dir = TempDir::new().unwrap();
+    fs::write(dir.path().join("test.txt"), "line1\nline2\nline3\nline4").unwrap();
+    let _guard = std::env::set_current_dir(dir.path());
+
+    let result = BashRipgrep
+        .execute(json!({"pattern": "line", "files": ".", "limit": 2}))
+        .await;
+    let results = result["results"].as_array().unwrap();
+    assert_eq!(results.len(), 2);
+}
+
+#[tokio::test]
+async fn test_bash_read_pagination_limit() {
+    let dir = TempDir::new().unwrap();
+    let content = "line1\nline2\nline3\nline4\nline5";
+    fs::write(dir.path().join("test.txt"), content).unwrap();
+    let _guard = std::env::set_current_dir(dir.path());
+
+    let result = BashRead
+        .execute(json!({"filepath": "test.txt", "limit": 2}))
+        .await;
+    if let Some(text) = result.get("content").and_then(|v| v.as_str()) {
+        assert!(text.contains("line1"));
+        assert!(!text.contains("line5"));
+        assert_eq!(text.split('\n').count(), 2);
+    } else {
+        panic!("no content key: {:?}", result);
+    }
+}
+
+// ============================================================
+// Codesearch — Directory Filter (type_filter = "d")
+// ============================================================
+
+#[tokio::test]
+async fn test_bash_find_directory_filter() {
+    let dir = TempDir::new().unwrap();
+    let subdir = dir.path().join("subdir");
+    fs::create_dir(&subdir).unwrap();
+    fs::write(dir.path().join("file.txt"), "").unwrap();
+    let _guard = std::env::set_current_dir(dir.path());
+
+    let result = BashFind
+        .execute(json!({"path": ".", "type_filter": "d", "limit": 10}))
+        .await;
+    let results = result["results"].as_array().unwrap();
+    let dirs: Vec<&str> = results.iter().filter_map(|v| v.as_str()).collect();
+    assert!(dirs.iter().any(|d| d.contains("subdir")));
+    assert!(!dirs.iter().any(|d| d.contains("file.txt")));
+}

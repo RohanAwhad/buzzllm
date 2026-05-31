@@ -240,7 +240,7 @@ async fn fetch_markdown(url: &str) -> String {
     html_to_markdown(&html)
 }
 
-fn html_to_markdown(html: &str) -> String {
+pub fn html_to_markdown(html: &str) -> String {
     let document = Html::parse_document(html);
     let mut output = String::new();
 
