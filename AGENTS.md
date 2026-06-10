@@ -1,61 +1,69 @@
 # AGENTS.md
 
-See `CLAUDE.md` for full architecture docs, provider system, and CLI usage examples.
-
 ## Quick reference
 
 ```bash
-# Install
-uv venv -p 3.10 && source .venv/bin/activate && uv pip install .
+# Build
+cargo build                        # debug
+cargo build --release              # release (~8.8 MB binary)
 
-# Install with test deps
-uv pip install -e ".[test]"
+# Test (single-threaded required)
+cargo test -- --test-threads=1
 
-# Run tests
-uv run pytest tests/unit -v              # unit (no network/docker needed)
-uv run pytest tests/integration -v       # needs OPENAI_API_KEY / ANTHROPIC_API_KEY
-uv run pytest tests/e2e -v               # CLI smoke tests
-
-# Python exec feature requires docker container
-cd python_runtime_docker && bash build_docker.sh build-python-exec && cd ..
+# Lint and format
+cargo clippy -- -D warnings        # CI treats warnings as errors
+cargo fmt -- --check               # format check
 ```
+
+CI runs all four checks: build, test, clippy, fmt (`.github/workflows/ci.yml`).
 
 ## Key gotchas
 
-- **Global mutable state**: `utils.AVAILABLE_TOOLS` and `llm.TOOL_CALLS` are module-level dicts. The `conftest.py` autouse fixture `reset_tool_state` clears them between tests. If you add new global state to `llm.py` or `tools/`, add cleanup to that fixture.
-- **Logs go to `/tmp/buzzllm.logs`**, not stdout. `logger.remove()` is called at import time in `main.py:4`, so loguru never writes to stderr.
-- **asyncio_mode = "auto"** in pytest config -- no need to decorate async tests with `@pytest.mark.asyncio`.
-- **Tool schema generation** derives from function docstrings + type hints via `callable_to_*_schema()` in `tools/utils.py`. Functions registered as tools **must** have a docstring with `:param` entries or schema generation will break.
+- **Tests require `--test-threads=1`** — `set_current_dir` is process-global; parallel tests corrupt each other's CWD. CI enforces this.
+- **Logs go to `/tmp/buzzllm.logs`**, not stdout. Controlled via `RUST_LOG` env var (e.g. `RUST_LOG=buzzllm=debug`).
+- **Tool schema generation** uses the `Tool` trait's `openai_schema()` / `anthropic_schema()` methods. Each tool struct must implement both.
+- **Prompt templates** are compiled in via `include_str!` in `src/prompts/mod.rs`. Adding a prompt means adding both a `.txt` file and a match arm in `get_prompt()`.
+- **`pythonexec` tool needs Docker** — build the image first: `cd python_runtime_docker && bash build_docker.sh build-python-exec`
+- **`codesearch` tools require `rg` (ripgrep)** — `brew install ripgrep` / `apt install ripgrep`.
+- **`.cargo/config.toml`** sets `RUST_TEST_THREADS=8` (overridden by explicit `--test-threads=1` on CLI).
 
 ## Layout
 
 ```
-src/buzzllm/
-  main.py          # CLI entrypoint, arg parsing, tool registration, provider dispatch
-  llm.py           # LLMOptions/RequestArgs/StreamResponse dataclasses, all provider
-                   #   make_*/handle_*/tool_call_response_to_* functions, invoke_llm loop
-  prompts/         # system prompt templates keyed by name (websearch, codesearch, etc.)
+src/
+  main.rs              CLI (clap) + prompt resolution + tool registration
+  llm.rs               invoke_llm() streaming loop, SSE parsing, tool execution
+  types.rs             LlmOptions, RequestArgs, StreamResponse, ToolCallData
+  output.rs            Colored stdout or SSE event format
+  lib.rs               Crate root, re-exports
+  providers/
+    mod.rs             LlmClient trait + create_client() factory
+    openai_chat.rs     /v1/chat/completions
+    openai_responses.rs /v1/responses
+    anthropic.rs       /v1/messages
+    vertexai_anthropic.rs GCP Vertex AI (delegates SSE to anthropic)
   tools/
-    utils.py       # AVAILABLE_TOOLS registry, add_tool(), callable_to_*_schema()
-    websearch.py   # search_web (DuckDuckGo + Brave fallback), scrape_webpage (crawl4ai)
-    codesearch.py  # bash_find, bash_ripgrep, bash_read
-    pythonexec.py  # python_execute (Docker container on port 8787)
+    mod.rs             Tool trait + ToolRegistry
+    codesearch.rs      BashFind, BashRipgrep, BashRead
+    websearch.rs       SearchWeb (DDG + Brave fallback), ScrapeWebpage
+    pythonexec.rs      PythonExecute (Docker via bollard)
+    write_file.rs      WriteFile (exact string replace)
+    bash.rs            Bash (arbitrary shell commands)
+  prompts/
+    mod.rs             get_prompt() + prompt_names()
+    *.txt              7 prompt templates (include_str! at compile time)
 
-tests/
-  conftest.py      # shared fixtures, global state reset, skip markers
-  unit/            # fast, no network/docker
-  integration/     # needs real API keys in env
-  e2e/             # CLI subprocess tests
+tests/                 Integration/e2e tests (cargo test)
 ```
 
 ## Adding a new provider
 
-1. Add `make_<name>_request_args()`, `handle_<name>_stream_response()`, and `tool_call_response_to_<name>_messages()` in `llm.py`
-2. Add entry to `provider_map` dict in `main.py:chat()` (~line 87)
-3. Add the provider name to `--provider` choices in `parse_args()` (~line 40)
+1. Create `src/providers/<name>.rs` — implement `LlmClient` trait
+2. Add the struct + match arm in `create_client()` in `src/providers/mod.rs`
+3. Add the provider name to `value_parser` in `src/main.rs` Cli struct
 
 ## Adding a new tool
 
-1. Create the callable in the appropriate `tools/*.py` file (must have typed params + docstring with `:param`)
-2. Register with `utils.add_tool(fn)` in the relevant `elif` branch of `main.py:chat()`
-3. Add `callable_to_schema(utils.AVAILABLE_TOOLS["name"])` to the tools list in the same branch
+1. Create a struct implementing `Tool` trait in `src/tools/<name>.rs`
+2. Register it in the relevant prompt branch in `src/main.rs`
+3. Add `mod <name>;` to `src/tools/mod.rs`

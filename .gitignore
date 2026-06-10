@@ -1,13 +1,8 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
+# Rust
+target/
 
-# Virtual environments
-.venv
+# Misc
+.DS_Store
 dev_scratch
 .dingllm/files.txt
 llm.md
