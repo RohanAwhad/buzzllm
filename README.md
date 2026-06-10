@@ -14,7 +14,7 @@ Requires Rust toolchain (1.75+).
 
 ```bash
 git clone https://github.com/RohanAwhad/buzzllm.git
-cd buzzllm/rust
+cd buzzllm
 cargo build --release
 # Binary: target/release/buzzllm (~8.8 MB)
 ```
@@ -201,17 +201,8 @@ See `.dingllm/specs/v2/` for C4 architecture and sequence diagrams.
 
 ## Testing
 
-Rust tests (154 tests across 7 files):
 ```bash
-cd rust
-cargo test -- --test-threads=1   # tools tests require single-threaded CWD
+cargo test -- --test-threads=1   # single-threaded required (set_current_dir is process-global)
 ```
 
-Note: `--test-threads=1` is required because `set_current_dir` is a process-global. CI enforces this.
-
-Python test suite (reference):
-```bash
-uv run pytest tests/unit -v          # unit (no network/Docker)
-uv run pytest tests/integration -v   # needs API keys
-uv run pytest tests/e2e -v           # CLI smoke tests
-```
+CI enforces `--test-threads=1`.
