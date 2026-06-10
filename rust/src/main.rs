@@ -41,6 +41,10 @@ struct Cli {
     #[arg(long)]
     think: bool,
 
+    /// Maximum inference iterations (tool-calling loop limit)
+    #[arg(long, default_value_t = 100)]
+    max_iters: u32,
+
     /// Enable SSE mode for printing
     #[arg(short = 'S', long)]
     sse: bool,
@@ -122,7 +126,7 @@ async fn chat(args: Cli) {
         temperature: args.temperature,
         think: args.think,
         tools,
-        max_infer_iters: 10,
+        max_infer_iters: args.max_iters,
     };
 
     llm::invoke_llm(

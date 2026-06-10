@@ -10,7 +10,13 @@ fn get_cwd() -> PathBuf {
 }
 
 fn resolve_path(filepath: &str, cwd: &PathBuf) -> Result<PathBuf, String> {
-    let resolved = cwd.join(filepath);
+    let path = std::path::Path::new(filepath);
+    let resolved = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        cwd.join(filepath)
+    };
+    let is_absolute = path.is_absolute();
 
     let resolved_canonical = if resolved.exists() {
         resolved
@@ -31,6 +37,10 @@ fn resolve_path(filepath: &str, cwd: &PathBuf) -> Result<PathBuf, String> {
             .map_err(|e| format!("invalid path '{}': {}", filepath, e))?;
         parent_canonical.join(resolved.file_name().unwrap())
     };
+
+    if is_absolute {
+        return Ok(resolved_canonical);
+    }
 
     if !resolved_canonical.starts_with(cwd) {
         return Err(format!(

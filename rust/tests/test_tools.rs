@@ -64,12 +64,12 @@ fn test_write_file_name() {
 async fn test_write_file_new_file() {
     let dir = TempDir::new().unwrap();
     let filepath = dir.path().join("new.txt");
-    let _guard = std::env::set_current_dir(dir.path());
+    let path_str = filepath.to_string_lossy().to_string();
 
     let tool = WriteFile;
     let result = tool
         .execute(json!({
-            "filepath": "new.txt",
+            "filepath": path_str,
             "old_string": "",
             "new_string": "hello world"
         }))
@@ -85,13 +85,13 @@ async fn test_write_file_new_file() {
 async fn test_write_file_edit_existing() {
     let dir = TempDir::new().unwrap();
     let filepath = dir.path().join("edit.txt");
+    let path_str = filepath.to_string_lossy().to_string();
     fs::write(&filepath, "hello world").unwrap();
-    let _guard = std::env::set_current_dir(dir.path());
 
     let tool = WriteFile;
     let result = tool
         .execute(json!({
-            "filepath": "edit.txt",
+            "filepath": path_str,
             "old_string": "hello",
             "new_string": "goodbye"
         }))
@@ -105,13 +105,13 @@ async fn test_write_file_edit_existing() {
 async fn test_write_file_not_found() {
     let dir = TempDir::new().unwrap();
     let filepath = dir.path().join("edit.txt");
+    let path_str = filepath.to_string_lossy().to_string();
     fs::write(&filepath, "hello world").unwrap();
-    let _guard = std::env::set_current_dir(dir.path());
 
     let tool = WriteFile;
     let result = tool
         .execute(json!({
-            "filepath": "edit.txt",
+            "filepath": path_str,
             "old_string": "nonexistent",
             "new_string": "x"
         }))
@@ -124,13 +124,13 @@ async fn test_write_file_not_found() {
 async fn test_write_file_multiple_matches() {
     let dir = TempDir::new().unwrap();
     let filepath = dir.path().join("edit.txt");
+    let path_str = filepath.to_string_lossy().to_string();
     fs::write(&filepath, "hello hello world").unwrap();
-    let _guard = std::env::set_current_dir(dir.path());
 
     let tool = WriteFile;
     let result = tool
         .execute(json!({
-            "filepath": "edit.txt",
+            "filepath": path_str,
             "old_string": "hello",
             "new_string": "x"
         }))
@@ -149,12 +149,12 @@ async fn test_write_file_missing_filepath() {
 #[tokio::test]
 async fn test_write_file_parent_not_exists() {
     let dir = TempDir::new().unwrap();
-    let _guard = std::env::set_current_dir(dir.path());
+    let path_str = dir.path().join("subdir/new.txt").to_string_lossy().to_string();
 
     let tool = WriteFile;
     let result = tool
         .execute(json!({
-            "filepath": "subdir/new.txt",
+            "filepath": path_str,
             "old_string": "",
             "new_string": "hello"
         }))
@@ -166,12 +166,12 @@ async fn test_write_file_parent_not_exists() {
 #[tokio::test]
 async fn test_write_file_missing_file_with_old_string() {
     let dir = TempDir::new().unwrap();
-    let _guard = std::env::set_current_dir(dir.path());
+    let path_str = dir.path().join("nonexistent.txt").to_string_lossy().to_string();
 
     let tool = WriteFile;
     let result = tool
         .execute(json!({
-            "filepath": "nonexistent.txt",
+            "filepath": path_str,
             "old_string": "hello",
             "new_string": "x"
         }))
@@ -250,10 +250,10 @@ fn test_bash_read_name() {
 async fn test_bash_read_content() {
     let dir = TempDir::new().unwrap();
     let filepath = dir.path().join("readme.txt");
+    let path_str = filepath.to_string_lossy().to_string();
     fs::write(&filepath, "line1\nline2\nline3").unwrap();
-    let _guard = std::env::set_current_dir(dir.path());
 
-    let result = BashRead.execute(json!({"filepath": "readme.txt"})).await;
+    let result = BashRead.execute(json!({"filepath": path_str})).await;
     assert!(result["content"].as_str().unwrap().contains("line1"));
     assert_eq!(result["total"], 3);
 }
@@ -262,11 +262,11 @@ async fn test_bash_read_content() {
 async fn test_bash_read_pagination() {
     let dir = TempDir::new().unwrap();
     let filepath = dir.path().join("readme.txt");
+    let path_str = filepath.to_string_lossy().to_string();
     fs::write(&filepath, "a\nb\nc\nd\ne").unwrap();
-    let _guard = std::env::set_current_dir(dir.path());
 
     let result = BashRead
-        .execute(json!({"filepath": "readme.txt", "limit": 2, "offset": 1}))
+        .execute(json!({"filepath": path_str, "limit": 2, "offset": 1}))
         .await;
     assert_eq!(result["returned"], 2);
     assert_eq!(result["total"], 5);
@@ -293,12 +293,14 @@ async fn test_bash_read_not_found() {
 #[tokio::test]
 async fn test_bash_find_lists_files() {
     let dir = TempDir::new().unwrap();
+    let path = dir.path().to_string_lossy().to_string();
     fs::write(dir.path().join("a.rs"), "content").unwrap();
     fs::write(dir.path().join("b.py"), "content").unwrap();
-    let _guard = std::env::set_current_dir(dir.path());
 
-    let result = BashFind.execute(json!({"path": ".", "limit": 10})).await;
-    let results = result["results"].as_array().unwrap();
+    let result = BashFind.execute(json!({"path": path, "limit": 10})).await;
+    let results = result["results"]
+        .as_array()
+        .unwrap_or_else(|| panic!("no results key: {:?}", result));
     let files: Vec<&str> = results.iter().filter_map(|v| v.as_str()).collect();
     assert!(files.iter().any(|f| f.contains("a.rs")));
     assert!(files.iter().any(|f| f.contains("b.py")));
@@ -307,12 +309,12 @@ async fn test_bash_find_lists_files() {
 #[tokio::test]
 async fn test_bash_find_glob_filter() {
     let dir = TempDir::new().unwrap();
+    let path = dir.path().to_string_lossy().to_string();
     fs::write(dir.path().join("a.rs"), "").unwrap();
     fs::write(dir.path().join("b.py"), "").unwrap();
-    let _guard = std::env::set_current_dir(dir.path());
 
     let result = BashFind
-        .execute(json!({"path": ".", "name": "*.rs", "limit": 10}))
+        .execute(json!({"path": path, "name": "*.rs", "limit": 10}))
         .await;
     let results = result["results"].as_array().unwrap();
     for r in results {
@@ -328,10 +330,10 @@ async fn test_bash_find_glob_filter() {
 async fn test_bash_ripgrep_finds_pattern() {
     let dir = TempDir::new().unwrap();
     fs::write(dir.path().join("test.txt"), "hello world\nfoo bar").unwrap();
-    let _guard = std::env::set_current_dir(dir.path());
+    let path = dir.path().to_string_lossy().to_string();
 
     let result = BashRipgrep
-        .execute(json!({"pattern": "hello", "files": "."}))
+        .execute(json!({"pattern": "hello", "files": path}))
         .await;
     let results = result["results"].as_array().unwrap();
     assert!(!results.is_empty());
@@ -341,10 +343,10 @@ async fn test_bash_ripgrep_finds_pattern() {
 async fn test_bash_ripgrep_no_match() {
     let dir = TempDir::new().unwrap();
     fs::write(dir.path().join("test.txt"), "hello world").unwrap();
-    let _guard = std::env::set_current_dir(dir.path());
+    let path = dir.path().to_string_lossy().to_string();
 
     let result = BashRipgrep
-        .execute(json!({"pattern": "ZXYZZYNOTFOUND", "files": "."}))
+        .execute(json!({"pattern": "ZXYZZYNOTFOUND", "files": path}))
         .await;
     assert!(result.get("error").is_some());
 }
@@ -392,12 +394,12 @@ async fn test_bash_read_invalid_path() {
 #[tokio::test]
 async fn test_bash_find_pagination_limit() {
     let dir = TempDir::new().unwrap();
+    let path = dir.path().to_string_lossy().to_string();
     fs::write(dir.path().join("a.rs"), "").unwrap();
     fs::write(dir.path().join("b.py"), "").unwrap();
     fs::write(dir.path().join("c.md"), "").unwrap();
-    let _guard = std::env::set_current_dir(dir.path());
 
-    let result = BashFind.execute(json!({"path": ".", "limit": 2})).await;
+    let result = BashFind.execute(json!({"path": path, "limit": 2})).await;
     let results = result["results"].as_array().unwrap();
     assert_eq!(results.len(), 2);
 }
@@ -405,28 +407,32 @@ async fn test_bash_find_pagination_limit() {
 #[tokio::test]
 async fn test_bash_find_pagination_offset() {
     let dir = TempDir::new().unwrap();
+    let path = dir.path().to_string_lossy().to_string();
     fs::write(dir.path().join("a.rs"), "").unwrap();
     fs::write(dir.path().join("b.py"), "").unwrap();
     fs::write(dir.path().join("c.md"), "").unwrap();
-    let _guard = std::env::set_current_dir(dir.path());
 
-    let all = BashFind.execute(json!({"path": ".", "limit": 0})).await;
+    let all = BashFind.execute(json!({"path": path, "limit": 0})).await;
     let offset = BashFind
-        .execute(json!({"path": ".", "limit": 0, "offset": 1}))
+        .execute(json!({"path": path.clone(), "limit": 0, "offset": 1}))
         .await;
-    let all_results = all["results"].as_array().unwrap();
-    let offset_results = offset["results"].as_array().unwrap();
+    let all_results = all["results"]
+        .as_array()
+        .unwrap_or_else(|| panic!("all has no results key: {:?}", all));
+    let offset_results = offset["results"]
+        .as_array()
+        .unwrap_or_else(|| panic!("offset has no results key: {:?}", offset));
     assert_eq!(offset_results.len(), all_results.len() - 1);
 }
 
 #[tokio::test]
 async fn test_bash_ripgrep_pagination_limit() {
     let dir = TempDir::new().unwrap();
+    let path = dir.path().to_string_lossy().to_string();
     fs::write(dir.path().join("test.txt"), "line1\nline2\nline3\nline4").unwrap();
-    let _guard = std::env::set_current_dir(dir.path());
 
     let result = BashRipgrep
-        .execute(json!({"pattern": "line", "files": ".", "limit": 2}))
+        .execute(json!({"pattern": "line", "files": path, "limit": 2}))
         .await;
     let results = result["results"].as_array().unwrap();
     assert_eq!(results.len(), 2);
@@ -437,10 +443,10 @@ async fn test_bash_read_pagination_limit() {
     let dir = TempDir::new().unwrap();
     let content = "line1\nline2\nline3\nline4\nline5";
     fs::write(dir.path().join("test.txt"), content).unwrap();
-    let _guard = std::env::set_current_dir(dir.path());
+    let path_str = dir.path().join("test.txt").to_string_lossy().to_string();
 
     let result = BashRead
-        .execute(json!({"filepath": "test.txt", "limit": 2}))
+        .execute(json!({"filepath": path_str, "limit": 2}))
         .await;
     if let Some(text) = result.get("content").and_then(|v| v.as_str()) {
         assert!(text.contains("line1"));
@@ -458,15 +464,17 @@ async fn test_bash_read_pagination_limit() {
 #[tokio::test]
 async fn test_bash_find_directory_filter() {
     let dir = TempDir::new().unwrap();
+    let path = dir.path().to_string_lossy().to_string();
     let subdir = dir.path().join("subdir");
     fs::create_dir(&subdir).unwrap();
     fs::write(dir.path().join("file.txt"), "").unwrap();
-    let _guard = std::env::set_current_dir(dir.path());
 
     let result = BashFind
-        .execute(json!({"path": ".", "type_filter": "d", "limit": 10}))
+        .execute(json!({"path": path, "type_filter": "d", "limit": 10}))
         .await;
-    let results = result["results"].as_array().unwrap();
+    let results = result["results"]
+        .as_array()
+        .unwrap_or_else(|| panic!("no results key: {:?}", result));
     let dirs: Vec<&str> = results.iter().filter_map(|v| v.as_str()).collect();
     assert!(dirs.iter().any(|d| d.contains("subdir")));
     assert!(!dirs.iter().any(|d| d.contains("file.txt")));

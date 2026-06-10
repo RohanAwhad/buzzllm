@@ -7,7 +7,7 @@ fn test_llm_options_defaults() {
     assert_eq!(opts.max_tokens, Some(8192));
     assert_eq!(opts.temperature, 0.8);
     assert!(!opts.think);
-    assert_eq!(opts.max_infer_iters, 10);
+    assert_eq!(opts.max_infer_iters, 100);
     assert!(opts.tools.is_none());
 }
 

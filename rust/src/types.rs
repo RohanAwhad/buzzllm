@@ -24,7 +24,7 @@ impl Default for LlmOptions {
             temperature: 0.8,
             think: false,
             tools: None,
-            max_infer_iters: 10,
+            max_infer_iters: 100,
         }
     }
 }

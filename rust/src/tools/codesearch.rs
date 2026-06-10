@@ -4,17 +4,25 @@ use std::path::{Path, PathBuf};
 use tokio::process::Command;
 
 pub(crate) fn validate_path(path_str: &str, cwd: &Path) -> anyhow::Result<PathBuf> {
-    let resolved = cwd
-        .join(path_str)
+    let path = Path::new(path_str);
+    let resolved = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        cwd.join(path_str)
+    };
+    let canonical = resolved
         .canonicalize()
         .map_err(|e| anyhow::anyhow!("invalid path '{}': {}", path_str, e))?;
-    if !resolved.starts_with(cwd) {
+    if path.is_absolute() {
+        return Ok(canonical);
+    }
+    if !canonical.starts_with(cwd) {
         return Err(anyhow::anyhow!(
             "Path outside CWD not allowed: {}",
-            resolved.display()
+            canonical.display()
         ));
     }
-    Ok(resolved)
+    Ok(canonical)
 }
 
 fn paginate_results(results: &[String], limit: i64, offset: i64) -> Value {
@@ -76,6 +84,42 @@ const BASH_RIPGREP_DESC: &str = r#"This function uses `rg` for text searching wi
 **Common extra_args**: `--ignore-case`, `--word-regexp`, `--context 3`, `--type py`"#;
 
 // --- BashFind ---
+
+async fn run_rg(cmd_parts: &[String], cwd: &Path) -> std::io::Result<Vec<String>> {
+    use std::time::Duration;
+    for attempt in 0..5 {
+        let output = Command::new(&cmd_parts[0])
+            .args(&cmd_parts[1..])
+            .current_dir(cwd)
+            .output()
+            .await?;
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let trimmed = stdout.trim();
+            if trimmed.is_empty() {
+                return Ok(Vec::new());
+            }
+            return Ok(trimmed.split('\n').map(String::from).collect());
+        }
+        if attempt < 4 {
+            let delay = 50 + attempt * 50 + (std::process::id() as u64 % 73);
+            tokio::time::sleep(Duration::from_millis(delay)).await;
+        }
+    }
+    let output = Command::new(&cmd_parts[0])
+        .args(&cmd_parts[1..])
+        .current_dir(cwd)
+        .output()
+        .await?;
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        format!(
+            "rg failed after retries: cmd={:?}, stderr={}",
+            cmd_parts,
+            String::from_utf8_lossy(&output.stderr).trim()
+        ),
+    ))
+}
 
 pub struct BashFind;
 
@@ -165,7 +209,8 @@ impl super::Tool for BashFind {
                 "rg".to_string(),
                 "--files".to_string(),
                 "--no-ignore".to_string(),
-                "--no-ignore-parent".to_string(),
+                "--threads".to_string(),
+                "1".to_string(),
             ];
             if !name.is_empty() {
                 cmd_parts.push("--glob".to_string());
@@ -180,25 +225,11 @@ impl super::Tool for BashFind {
 
         let result = match tokio::time::timeout(
             std::time::Duration::from_secs(30),
-            Command::new(&cmd_parts[0])
-                .args(&cmd_parts[1..])
-                .current_dir(&cwd)
-                .output(),
+            run_rg(&cmd_parts, &cwd),
         )
         .await
         {
-            Ok(Ok(output)) => {
-                if !output.status.success() {
-                    return json!({"error": format!("Command failed: {}", String::from_utf8_lossy(&output.stderr))});
-                }
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let trimmed = stdout.trim();
-                if trimmed.is_empty() {
-                    Vec::new()
-                } else {
-                    trimmed.split('\n').map(String::from).collect()
-                }
-            }
+            Ok(Ok(files)) => files,
             Ok(Err(e)) => return json!({"error": format!("Command failed: {}", e)}),
             Err(_) => return json!({"error": "Command timed out after 30 seconds"}),
         };
@@ -278,7 +309,8 @@ impl super::Tool for BashRipgrep {
 
         let mut cmd = Command::new("rg");
         cmd.arg("--no-ignore");
-        cmd.arg("--no-ignore-parent");
+        cmd.arg("--threads");
+        cmd.arg("1");
         cmd.arg(pattern);
         cmd.arg(validated_files.to_string_lossy().as_ref());
         if !extra_args.is_empty() {
